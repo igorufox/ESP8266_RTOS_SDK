@@ -172,7 +172,7 @@ struct scan_info {
 	int nl_scan_event;
 	u64 scan_start_tsf;
 	u8 scan_start_tsf_bssid[ETH_ALEN];
-} scan_info;
+}; /* ESPurna: a type only; the variable it declared here was defined by every file that read the header (GCC 10+ -fno-common) */
 
 
 /* driver_common.c */

@@ -172,7 +172,18 @@ int wpa_parse_wpa_ie_wrapper(const u8 *wpa_ie, size_t wpa_ie_len, wifi_wpa_ie_t 
     data->proto = ie.proto;
     data->pairwise_cipher = cipher_type_map_supp_to_public(ie.pairwise_cipher);
     data->group_cipher = cipher_type_map_supp_to_public(ie.group_cipher);
-    data->key_mgmt = ie.key_mgmt;
+    /* ESPurna 20.11: the library turns key_mgmt into the authmode of a scan record by exact values only (PSK, SAE,
+       PSK|SAE); an AP with PSK-SHA256 or FT next to them (foxy: SAE FT-SAE WPA-PSK WPA-PSK-SHA256 FT-PSK = 0x502)
+       matched none and showed up wrong in the scan. The families instead of the suites */
+    {
+        const int sae = ie.key_mgmt & (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_FT_SAE);
+        const int psk = ie.key_mgmt & (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_PSK_SHA256 | WPA_KEY_MGMT_FT_PSK);
+        if (sae || psk) {
+            data->key_mgmt = (sae ? WPA_KEY_MGMT_SAE : 0) | (psk ? WPA_KEY_MGMT_PSK : 0);
+        } else {
+            data->key_mgmt = ie.key_mgmt;
+        }
+    }
     data->capabilities = ie.capabilities;
     data->pmkid = ie.pmkid;
     data->mgmt_group_cipher = cipher_type_map_supp_to_public(ie.mgmt_group_cipher);
@@ -180,6 +191,10 @@ int wpa_parse_wpa_ie_wrapper(const u8 *wpa_ie, size_t wpa_ie_len, wifi_wpa_ie_t 
     return ret;
 }
 
+/* ESPurna 19.11: every disconnect drops the SAE data and the current PMKSA, our own leave (ASSOC_LEAVE, a WIFI.RESET or
+   a new attempt of ESPurna) too: with them kept the next association went in by the cached PMK in 10 ms and the AP
+   (foxy, SAE + PMF) dropped it ~0.9 s later, again and again - the station never came back without a reboot. The cost:
+   one full SAE (~2.5 s) on the next connect */
 static void wpa_sta_disconnected_cb(uint8_t reason_code)
 {
     switch (reason_code) {
@@ -197,6 +212,10 @@ static void wpa_sta_disconnected_cb(uint8_t reason_code)
             wpa_sta_clear_curr_pmksa();
             break;
         default:
+            /* our own leave (ASSOC_LEAVE) included: the cached PMK goes, the SAE data stays - the leave of a new
+               attempt reports itself while that attempt's SAE already runs (19.11: freeing it there failed every
+               SAE, "state 2 -> 0") */
+            wpa_sta_clear_curr_pmksa();
             break;
     }
 }

@@ -27,24 +27,6 @@
 
 #include "nvs.h"
 
-/* DIAG 11-18 (ESPurna, temporary): which calls of the Wi-Fi library into the kernel come from an interrupt, the NMI,
-   or block while the scheduler is suspended (the pending ready list of FreeRTOS-Kernel V11 breaks) */
-extern uint8_t NMIIrqIsOn;
-extern int xPortInIsrContext(void);
-static uint32_t s_espurna_diag;
-
-static void espurna_diag(const char *what, int isr_api, int blocking)
-{
-    const int nmi = NMIIrqIsOn != 0;
-    const int isr = xPortInIsrContext() != 0;
-    const int susp = xTaskGetSchedulerState() == taskSCHEDULER_SUSPENDED;
-    const int odd = nmi || (!isr_api && isr) || (blocking && susp);
-    if (odd && (s_espurna_diag < 60)) {
-        ++s_espurna_diag;
-        ets_printf("DIAG wifi %s nmi %d isr %d susp %d\n", what, nmi, isr, susp);
-    }
-}
-
 void *__wifi_task_create(void *task_func, const char *name, uint32_t stack_depth, void *param, uint32_t prio)
 {
     portBASE_TYPE ret;
@@ -56,7 +38,6 @@ void *__wifi_task_create(void *task_func, const char *name, uint32_t stack_depth
 
 void __wifi_task_delete(void *task)
 {
-    espurna_diag("task_delete", 0, 0);
     vTaskDelete(task);
 }
 
@@ -67,7 +48,6 @@ void __wifi_task_yield_from_isr(void)
 
 void __wifi_task_delay(uint32_t tick)
 {
-    espurna_diag("task_delay", 0, 1);
     vTaskDelay(tick);
 }
 
@@ -83,13 +63,11 @@ uint32_t __wifi_task_ms_to_ticks(uint32_t ms)
 
 void __wifi_task_suspend_all(void)
 {
-    espurna_diag("suspend_all", 0, 0);
     vTaskSuspendAll();
 }
 
 void __wifi_task_resume_all(void)
 {
-    espurna_diag("resume_all", 0, 0);
     xTaskResumeAll();
 }
 
@@ -105,7 +83,6 @@ void __wifi_queue_delete(void *queue)
 
 int __wifi_queue_send(void *queue, void *item, uint32_t block_time_tick, uint32_t pos)
 {
-    espurna_diag("queue_send", 0, block_time_tick != 0);
     signed portBASE_TYPE ret;
     BaseType_t os_pos;
 
@@ -127,7 +104,6 @@ int __wifi_queue_send(void *queue, void *item, uint32_t block_time_tick, uint32_
 
 int __wifi_queue_send_from_isr(void *queue, void *item, int *hptw)
 {
-    espurna_diag("queue_send_from_isr", 1, 0);
     signed portBASE_TYPE ret;
 
     ret = xQueueSendFromISR(queue, item, (signed portBASE_TYPE *)hptw);
@@ -137,7 +113,6 @@ int __wifi_queue_send_from_isr(void *queue, void *item, int *hptw)
 
 int __wifi_queue_recv(void *queue, void *item, uint32_t block_time_tick)
 {
-    espurna_diag("queue_recv", 0, block_time_tick != 0);
     signed portBASE_TYPE ret;
 
     if (block_time_tick == OSI_FUNCS_TIME_BLOCKING) {
@@ -161,13 +136,11 @@ void *__wifi_timer_create(const char *name, uint32_t period_ticks, bool auto_loa
 
 int __wifi_timer_reset(void *timer, uint32_t ticks)
 {
-    espurna_diag("timer_reset", 0, ticks != 0);
     return xTimerReset(timer, ticks);
 }
 
 int __wifi_timer_stop(void *timer, uint32_t ticks)
 {
-    espurna_diag("timer_stop", 0, ticks != 0);
     return xTimerStop(timer, ticks);
 }
 
@@ -190,7 +163,6 @@ void __wifi_semphr_delete(void* semphr)
 
 int32_t __wifi_semphr_take(void* semphr, uint32_t block_time_tick)
 {
-    espurna_diag("semphr_take", 0, block_time_tick != 0);
     if (block_time_tick == OSI_FUNCS_TIME_BLOCKING) {
         return (int32_t)xSemaphoreTake(semphr, portMAX_DELAY);
     } else {
@@ -200,6 +172,5 @@ int32_t __wifi_semphr_take(void* semphr, uint32_t block_time_tick)
 
 int32_t __wifi_semphr_give(void* semphr)
 {
-    espurna_diag("semphr_give", 0, 0);
     return (int32_t)xSemaphoreGive(semphr);
 }

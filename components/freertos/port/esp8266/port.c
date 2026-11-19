@@ -71,8 +71,6 @@ uint64_t g_esp_os_cpu_clk;
 
 static uint32_t s_switch_ctx_flag;
 
-#define ISR_STACK_PATTERN   0xa5a5a5a5
-
 void vPortEnterCritical(void);
 void vPortExitCritical(void);
 
@@ -211,17 +209,6 @@ portBASE_TYPE xPortStartScheduler(void)
      * Todo: Remove this one when refactor startup function.
      */
     cpu_sr = 0x20;
-
-    /* DIAG 11-19 (ESPurna, temporary): the interrupt stack (CONFIG_FREERTOS_ISR_STACKSIZE, xtensa_vectors.S, every
-     * level 1 handler and the task switch run on it) filled with a pattern, the idle hook reports how much of it the
-     * deepest interrupt left (below it: _chip_nmi_cnt, the NMI's save area pick) */
-    {
-        extern uint32_t _chip_interrupt_stk[];
-
-        for (int i = 0; i < (CONFIG_FREERTOS_ISR_STACKSIZE / 4); i++) {
-            _chip_interrupt_stk[i] = ISR_STACK_PATTERN;
-        }
-    }
 
     /*******software isr*********/
     _xt_isr_attach(ETS_SOFT_INUM, SoftIsrHdl, NULL);
@@ -411,62 +398,6 @@ int xPortInIsrContext(void)
     return s_xt_isr_status != 0;
 }
 
-/* DIAG 11-19 (ESPurna, temporary): the nesting of the port's critical section, for the list checks of
- * freertos_tasks_c_additions.h (a task that blocks inside it cannot yield) */
-UBaseType_t uxPortCriticalNesting(void)
-{
-    return uxCriticalNesting;
-}
-
-/* DIAG 11-19 (ESPurna, temporary): the untouched bottom of the interrupt stack, checked from the idle hook (task
- * context: an interrupt that prints would itself eat the stack it reports on). The first 32 words only, cheap enough
- * for every idle pass; once less than 96 bytes stayed untouched it prints the exact figure once */
-static void isr_stack_check(void)
-{
-    extern uint32_t _chip_interrupt_stk[];
-    static int s_reported;
-
-    if (s_reported) {
-        return;
-    }
-
-    int words = 0;
-    while ((words < 32) && (_chip_interrupt_stk[words] == ISR_STACK_PATTERN)) {
-        words++;
-    }
-
-    if (words < 24) {
-        s_reported = 1;
-        ets_printf("DIAG isr stack: %d of %d bytes never used\n", words * 4, CONFIG_FREERTOS_ISR_STACKSIZE);
-    }
-}
-
-/* DIAG 11-18 (ESPurna): configASSERT of the kernel */
-extern UBaseType_t uxPortSchedulerSuspended(void);
-void IRAM_ATTR vPortAssert(const char *file, int line, void *caller)
-{
-    portDISABLE_INTERRUPTS();
-    ets_printf("DIAG assert %s:%d from %p task %s susp %u isr %d nmi %d\n", file, line, caller,
-               xTaskGetCurrentTaskHandle() ? pcTaskGetName(NULL) : "-", (unsigned) uxPortSchedulerSuspended(),
-               s_xt_isr_status != 0, NMIIrqIsOn);
-    abort();
-}
-
-/* DIAG 11-18 (ESPurna, temporary): FreeRTOSConfig.h trace macros */
-static uint32_t s_trace_blocking;
-
-void vPortTraceBlocking(const char *what, void *object, void *caller)
-{
-    /* the kernel suspends the scheduler itself right before these trace points: a second level is somebody else's */
-    const int suspended = uxPortSchedulerSuspended() >= 2;
-    const int isr = s_xt_isr_status != 0;
-    if ((suspended || isr || NMIIrqIsOn) && (s_trace_blocking < 40)) {
-        ++s_trace_blocking;
-        ets_printf("DIAG blocking %s %p from %p task %s susp %d isr %d nmi %d\n", what, object, caller,
-                   pcTaskGetName(NULL), suspended, isr, NMIIrqIsOn);
-    }
-}
-
 void __attribute__((weak, noreturn)) vApplicationStackOverflowHook(xTaskHandle xTask, const char *pcTaskName)
 {
     ets_printf("***ERROR*** A stack overflow in task %s has been detected.\r\n", pcTaskName);
@@ -497,8 +428,6 @@ BaseType_t xQueueGenericReceive(QueueHandle_t xQueue, void * const pvBuffer,
 
 void esp_internal_idle_hook(void)
 {
-    isr_stack_check();
-
     esp_task_wdt_reset();
 
     esp_sleep_start();

@@ -2395,3 +2395,10 @@ void wpa_sta_clear_curr_pmksa(void) {
 
 #endif // ESP_SUPPLICANT
 
+
+/* ESPurna: the key management negotiated for the current connection (WPA_KEY_MGMT_* bits: PSK, SAE, FT_*), for the
+   STATUS of the WebUI - the scan's authmode of the Wi-Fi library is only a guess for the mixed WPA2/WPA3 APs */
+unsigned int esp_wifi_sta_key_mgmt_espurna(void)
+{
+    return gWpaSm.key_mgmt;
+}
