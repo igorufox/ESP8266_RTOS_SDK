@@ -1,6 +1,6 @@
 {
   "name": "framework-esp8266-rtos-sdk",
-  "version": "3.4.0+espurna.2",
+  "version": "3.4.0+espurna.3",
   "description": "ESP8266_RTOS_SDK master 858c7c2e (Espressif) for ESPurna: FreeRTOS-Kernel V11.1.0, esp-lwip 2.2.0 (fd432e4e, the one of ESP-IDF 5.5.5) and mbedTLS 3.6.6 from their own packages, the ESPurna bootloader step",
   "license": "Apache-2.0",
   "repository": {
