@@ -33,12 +33,22 @@ jobs:
 
       - name: Package
         run: |
-          # the files of git, the submodules included (20.11: `zip -r .` with excludes exited 0 and wrote nothing)
+          # the files of git, the submodules included, zipped by Python (20.11: zip of the runner exited 0 and wrote
+          # nothing, twice)
           mkdir -p dist
-          git ls-files --recurse-submodules | zip -q "dist/$ZIP" -@
+          git ls-files --recurse-submodules > dist/files.txt
+          python3 - "dist/$ZIP" dist/files.txt <<'PY'
+          import sys, zipfile
+          out, names = sys.argv[1], open(sys.argv[2]).read().splitlines()
+          with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+              for name in filter(None, names):
+                  z.write(name)
+          with zipfile.ZipFile(out) as z:
+              listed = z.namelist()
+          assert "components/lwip/lwip/src/core/tcp.c" in listed, "lwip is missing"
+          print(out, len(listed), "files")
+          PY
           ls -l "dist/$ZIP"
-          test -s "dist/$ZIP"
-          unzip -l "dist/$ZIP" | grep -q "components/lwip/lwip/src/core/tcp.c"
 
       - uses: actions/upload-artifact@v4
         with:
