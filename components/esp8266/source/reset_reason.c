@@ -68,7 +68,14 @@ static inline uint32_t get_reset_reason(uint32_t rtc_reset_reason, uint32_t rese
                 return reset_reason_hint;
             return ESP_RST_POWERON;
         case EXT_RESET:
-            if (reset_reason_hint == ESP_RST_DEEPSLEEP) {
+            // espurna: chip::restart() jumps to the ROM reset vector, the RTC then reports EXT_RESET; the hint of that
+            // restart (cleared once read at boot, so a later RST press is still EXT) tells what it was
+            if (reset_reason_hint == ESP_RST_DEEPSLEEP ||
+                reset_reason_hint == ESP_RST_SW ||
+                reset_reason_hint == ESP_RST_FAST_SW ||
+                reset_reason_hint == ESP_RST_PANIC ||
+                reset_reason_hint == ESP_RST_BROWNOUT ||
+                reset_reason_hint == ESP_RST_TASK_WDT) {
                 return reset_reason_hint;
             }
             return ESP_RST_EXT;
@@ -82,6 +89,14 @@ static inline uint32_t get_reset_reason(uint32_t rtc_reset_reason, uint32_t rese
         case DEEPSLEEP_RESET:
             return ESP_RST_DEEPSLEEP;
         case OWDT_RESET:
+            // espurna: the panic handler and chip::restart() reset through the hardware watchdog (hardware_restart() of
+            // panic.c): a jump to the ROM's reset vector left the SPI flash controller as the SDK set it
+            if (reset_reason_hint == ESP_RST_SW ||
+                reset_reason_hint == ESP_RST_FAST_SW ||
+                reset_reason_hint == ESP_RST_PANIC ||
+                reset_reason_hint == ESP_RST_TASK_WDT) {
+                return reset_reason_hint;
+            }
             return ESP_RST_WDT;
         case SDIO_RESET:
             return ESP_RST_SDIO;

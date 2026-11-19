@@ -1,0 +1,29 @@
+name: Release
+
+# The PlatformIO package framework-esp8266-rtos-sdk of the espurna branch: a push releases the version of package.json
+# (3.4.0+espurna.1 -> tag 3.4.0-espurna.1) when that release does not exist yet - a new release is a version bump.
+# No build here: ESPurna builds the SDK (scripts/esp8266_rtos_sdk.py).
+on:
+  push:
+    branches: [espurna]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Release
+        run: |
+          TAG=$(python3 -c "import json; print(json.load(open('package.json'))['version'].replace('+', '-'))")
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "$TAG is released already"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file RELEASE.md
+          fi

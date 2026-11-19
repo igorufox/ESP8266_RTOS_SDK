@@ -33,6 +33,14 @@
 #include <mbedtls/platform.h>
 #include <mbedtls/sha256.h>
 
+/* ESPurna (mbedTLS 3.x): the random of the key parse (blinding of the pair check) and of the signature, the chip's
+ * hardware random (2.x took none) */
+static int crypto_rsa_random(void *ctx, unsigned char *buf, size_t len)
+{
+	(void) ctx;
+	return os_get_random(buf, len);
+}
+
 /* Dummy structures; these are just typecast to struct crypto_rsa_key */
 struct crypto_public_key;
 struct crypto_private_key;
@@ -121,7 +129,8 @@ struct crypto_private_key *  crypto_private_key_import(const u8 *key,
 
 	mbedtls_pk_init(pkey);
 
-	ret = mbedtls_pk_parse_key(pkey, key, len, (const unsigned char *)passwd, passwd ? os_strlen(passwd) : 0);
+	ret = mbedtls_pk_parse_key(pkey, key, len, (const unsigned char *)passwd, passwd ? os_strlen(passwd) : 0,
+			crypto_rsa_random, NULL);
 
 	if (ret < 0) {
 		wpa_printf(MSG_ERROR, "failed to parse private key");
@@ -212,13 +221,13 @@ int crypto_public_key_encrypt_pkcs1_v15(struct crypto_public_key *key,
 	}
 
 	ret = mbedtls_rsa_pkcs1_encrypt(mbedtls_pk_rsa(*pkey), mbedtls_ctr_drbg_random,
-			ctr_drbg, MBEDTLS_RSA_PUBLIC, inlen, in, out);
+			ctr_drbg, inlen, in, out);
 
 	if(ret != 0) {
 		wpa_printf(MSG_ERROR, " failed  !  mbedtls_rsa_pkcs1_encrypt returned -0x%04x", -ret);
 		goto cleanup;
 	}
-	*outlen = mbedtls_pk_rsa(*pkey)->len;
+	*outlen = mbedtls_rsa_get_len(mbedtls_pk_rsa(*pkey));
 
 cleanup:
 	mbedtls_ctr_drbg_free( ctr_drbg );
@@ -257,9 +266,9 @@ int  crypto_private_key_decrypt_pkcs1_v15(struct crypto_private_key *key,
 	if (ret < 0)
 		goto cleanup;
 
-	i =  mbedtls_pk_rsa(*pkey)->len;
+	i =  mbedtls_rsa_get_len(mbedtls_pk_rsa(*pkey));
 	ret = mbedtls_rsa_rsaes_pkcs1_v15_decrypt(mbedtls_pk_rsa(*pkey), mbedtls_ctr_drbg_random,
-			ctr_drbg, MBEDTLS_RSA_PRIVATE, &i, in, out, *outlen);
+			ctr_drbg, &i, in, out, *outlen);
 
 	*outlen = i;
 
@@ -280,13 +289,13 @@ int crypto_private_key_sign_pkcs1(struct crypto_private_key *key,
 	int ret;
 	mbedtls_pk_context *pkey  = (mbedtls_pk_context *)key;
 
-	if((ret = mbedtls_rsa_pkcs1_sign(mbedtls_pk_rsa(*pkey), NULL, NULL, MBEDTLS_RSA_PRIVATE,
-					(mbedtls_pk_rsa(*pkey))->hash_id,
+	if((ret = mbedtls_rsa_pkcs1_sign(mbedtls_pk_rsa(*pkey), crypto_rsa_random, NULL,
+					(mbedtls_md_type_t) mbedtls_rsa_get_md_alg(mbedtls_pk_rsa(*pkey)),
 					inlen, in, out)) != 0 ) {
 		wpa_printf(MSG_ERROR, " failed  ! mbedtls_rsa_pkcs1_sign returned %d", ret );
 		return -1;
 	}
-	*outlen = mbedtls_pk_rsa(*pkey)->len;
+	*outlen = mbedtls_rsa_get_len(mbedtls_pk_rsa(*pkey));
 
 	return 0;
 }
@@ -318,39 +327,40 @@ int  crypto_public_key_decrypt_pkcs1(struct crypto_public_key *key,
 		const u8 *crypt, size_t crypt_len,
 		u8 *plain, size_t *plain_len)
 {
-	const char *pers = "rsa_decrypt";
+	/* ESPurna (mbedTLS 3.x): mbedtls_rsa_pkcs1_decrypt() of a public key is gone; the raw public operation and the
+	 * PKCS #1 v1.5 block type 1 check of ESP-IDF 5.5's crypto_mbedtls-rsa.c */
+	size_t len;
+	u8 *pos;
 	mbedtls_pk_context *pkey = (mbedtls_pk_context *)key;
-	mbedtls_ctr_drbg_context ctr_drbg;
-	mbedtls_entropy_context entropy;
-	size_t i;
 
-	mbedtls_entropy_init( &entropy );
-	mbedtls_ctr_drbg_init( &ctr_drbg );
+	len = mbedtls_rsa_get_len(mbedtls_pk_rsa(*pkey));
+	if (len != crypt_len || len > *plain_len)
+		return -1;
 
-	int ret = mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func,
-			&entropy, (const unsigned char *) pers,
-			strlen( pers ) );
-	if(ret != 0) {
-		wpa_printf(MSG_ERROR, " failed  ! mbedtls_ctr_drbg_seed returned %d",
-				ret );
-		goto cleanup;
+	if (mbedtls_rsa_public(mbedtls_pk_rsa(*pkey), crypt, plain) < 0)
+		return -1;
+
+	/* EB = 00 || 01 || PS (FF..., 8 at least) || 00 || D */
+	if (len < 3 + 8 + 16 || plain[0] != 0x00 || plain[1] != 0x01 || plain[2] != 0xff) {
+		wpa_printf(MSG_INFO, "RSA: invalid signature EB structure");
+		return -1;
 	}
-
-	i =  mbedtls_pk_rsa(*pkey)->len;
-	ret = mbedtls_rsa_pkcs1_decrypt(mbedtls_pk_rsa(*pkey), mbedtls_ctr_drbg_random,
-			&ctr_drbg, MBEDTLS_RSA_PUBLIC, &i,
-			crypt, plain, *plain_len);
-	if( ret != 0 ) {
-		wpa_printf(MSG_ERROR, " failed ! mbedtls_rsa_pkcs1_decrypt returned %d",
-				ret );
-		goto cleanup;
+	pos = plain + 3;
+	while (pos < plain + len && *pos == 0xff)
+		pos++;
+	if (pos - plain - 2 < 8) {
+		wpa_printf(MSG_INFO, "RSA: too short signature padding");
+		return -1;
 	}
-	*plain_len = i;
+	if (pos + 16 >= plain + len || *pos != 0x00) {
+		wpa_printf(MSG_INFO, "RSA: invalid signature EB structure (2)");
+		return -1;
+	}
+	pos++;
+	len -= pos - plain;
+	os_memmove(plain, pos, len);
+	*plain_len = len;
 
-cleanup:
-	mbedtls_entropy_free( &entropy );
-	mbedtls_ctr_drbg_free( &ctr_drbg );
-
-	return ret;
+	return 0;
 }
 #endif

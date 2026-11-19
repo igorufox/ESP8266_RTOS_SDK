@@ -421,10 +421,8 @@ static void uart_intr_service(void *arg)
     // read status to get interrupt status for UART0-1
     uint32_t uart_intr_status = UART[uart_num]->int_st.val;
 
-    if (uart_isr_func == NULL) {
-        return;
-    }
-
+    /* espurna: no check of the array itself (never NULL, an error of GCC 14.2: -Werror=address); each handler is checked
+     * below */
     do {
         uart_intr_status = UART[uart_num]->int_st.val;
         if (uart_intr_status != 0) {

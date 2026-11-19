@@ -1,5 +1,16 @@
-idf_component_register(SRCS "bootloader_start.c"
+# ESPurna: the install step of a new head (code/espurna/arch/esp8266/bootloader/espurna_rbl.c of the repository),
+# given by scripts/esp8266_rtos_sdk.py as the environment variable ESPURNA_BOOTLOADER_STEP
+set(espurna_srcs "")
+if(DEFINED ENV{ESPURNA_BOOTLOADER_STEP})
+    set(espurna_srcs "$ENV{ESPURNA_BOOTLOADER_STEP}")
+endif()
+
+idf_component_register(SRCS "bootloader_start.c" ${espurna_srcs}
                     REQUIRES bootloader bootloader_support spi_flash)
+
+if(DEFINED ENV{ESPURNA_BOOTLOADER_STEP})
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ESPURNA_RBL=1)
+endif()
 
 idf_build_get_property(target IDF_TARGET)
 set(scripts "${target}.bootloader.ld"
@@ -9,3 +20,7 @@ set(scripts "${target}.bootloader.ld"
 target_linker_script(${COMPONENT_LIB} INTERFACE "${scripts}")
 
 target_link_libraries(${COMPONENT_LIB} INTERFACE "${ESP8266_BOOTLOADER_LIBS}")
+
+# espurna: GCC 14.2 calls libgcc where GCC 8.4 expanded inline (__bswapsi2 of __builtin_bswap32 in bootloader_flash.c):
+# the lx106 libgcc of the toolchain package (the -L of tools/cmake/toolchain-esp8266.cmake)
+target_link_libraries(${COMPONENT_LIB} INTERFACE gcc)

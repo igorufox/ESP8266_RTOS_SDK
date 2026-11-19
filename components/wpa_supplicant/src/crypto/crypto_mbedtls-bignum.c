@@ -193,8 +193,53 @@ int crypto_bignum_is_one(const struct crypto_bignum *a)
 }
 
 
+/* espurna: the Legendre symbol as the Jacobi symbol (p is an odd prime here), the binary algorithm of shifts and
+ * remainders instead of a 256-bit a^((p-1)/2) mod p: SAE hunting-and-pecking takes 40+ of them per attempt (k = 40),
+ * ~10 s of an attempt on the ESP8266 at 160 MHz (19.11). Its time depends on the input; the callers of SAE pass it
+ * blinded by a random value (is_quadratic_residue_blind() of sae.c), as hostapd does for this very reason */
 int crypto_bignum_legendre(const struct crypto_bignum *a,
                            const struct crypto_bignum *p)
+{
+    mbedtls_mpi x, n;
+    int t = 1, ret, res = -2;
+
+    mbedtls_mpi_init(&x);
+    mbedtls_mpi_init(&n);
+
+    MBEDTLS_MPI_CHK(mbedtls_mpi_mod_mpi(&x, (const mbedtls_mpi *) a, (const mbedtls_mpi *) p));
+    MBEDTLS_MPI_CHK(mbedtls_mpi_copy(&n, (const mbedtls_mpi *) p));
+
+    while (mbedtls_mpi_cmp_int(&x, 0) != 0) {
+        const size_t zeros = mbedtls_mpi_lsb(&x);
+        if (zeros) {
+            MBEDTLS_MPI_CHK(mbedtls_mpi_shift_r(&x, zeros));
+            /* (2/n) = -1 for n = 3, 5 mod 8 */
+            const int n8 = mbedtls_mpi_get_bit(&n, 0) | (mbedtls_mpi_get_bit(&n, 1) << 1) | (mbedtls_mpi_get_bit(&n, 2) << 2);
+            if ((zeros & 1) && ((n8 == 3) || (n8 == 5))) {
+                t = -t;
+            }
+        }
+
+        /* reciprocity: both 3 mod 4 flips the sign */
+        if (mbedtls_mpi_get_bit(&x, 1) && mbedtls_mpi_get_bit(&n, 1)) {
+            t = -t;
+        }
+
+        mbedtls_mpi_swap(&x, &n);
+        MBEDTLS_MPI_CHK(mbedtls_mpi_mod_mpi(&x, &x, &n));
+    }
+
+    res = (mbedtls_mpi_cmp_int(&n, 1) == 0) ? t : 0;
+
+cleanup:
+    mbedtls_mpi_free(&x);
+    mbedtls_mpi_free(&n);
+    return res;
+}
+
+/* the SDK's own, by exponentiation (kept for the comparison of the host test) */
+int crypto_bignum_legendre_exp(const struct crypto_bignum *a,
+                               const struct crypto_bignum *p)
 {
     mbedtls_mpi exp, tmp;
     int res = -2, ret;

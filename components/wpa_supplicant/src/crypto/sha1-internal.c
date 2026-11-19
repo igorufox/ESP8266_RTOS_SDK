@@ -73,18 +73,18 @@ sha1_vector(size_t num_elem, const u8 *addr[], const size_t *len, u8 *mac)
 
     mbedtls_sha1_init( &ctx );
 
-    if ((ret = mbedtls_sha1_starts_ret( &ctx)) != 0) {
+    if ((ret = mbedtls_sha1_starts( &ctx)) != 0) {
         goto exit;
     }
 
 
     for (i = 0; i < num_elem; i++) {
-        if ((ret = mbedtls_sha1_update_ret(&ctx, addr[i], len[i])) != 0) {
+        if ((ret = mbedtls_sha1_update(&ctx, addr[i], len[i])) != 0) {
             goto exit;
         }
     }
  
-    if ((ret = mbedtls_sha1_finish_ret( &ctx, mac)) != 0) {
+    if ((ret = mbedtls_sha1_finish( &ctx, mac)) != 0) {
         goto exit;
     }
 

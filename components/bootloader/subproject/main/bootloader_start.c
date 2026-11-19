@@ -45,6 +45,12 @@ void call_start_cpu(void)
         return;
     }
 
+#ifdef ESPURNA_RBL
+    // ESPurna: a new head left as an RBL package goes onto 'factory' first (code/espurna/arch/esp8266/bootloader)
+    extern void espurna_rbl_install(void);
+    espurna_rbl_install();
+#endif
+
 #ifdef CONFIG_BOOTLOADER_FAST_BOOT
     bootloader_utility_fast_boot_image();
 #endif

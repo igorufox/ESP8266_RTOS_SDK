@@ -105,6 +105,9 @@ size_t heap_caps_get_free_size(uint32_t caps);
  */
 size_t heap_caps_get_minimum_free_size(uint32_t caps);
 
+/* ESPurna: the largest block one malloc with these capabilities can take (as ESP-IDF) */
+size_t heap_caps_get_largest_free_block(uint32_t caps);
+
 /**
  * @brief Initialize regions of memory to the collection of heaps at runtime.
  *

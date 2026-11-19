@@ -83,7 +83,9 @@ static void user_init_entry(void *param)
     esp_task_wdt_init();
 #endif
 
+#ifndef ESPURNA_NO_PTHREAD
     assert(esp_pthread_init() == 0);
+#endif
 
 #ifdef CONFIG_BOOTLOADER_FAST_BOOT
     REG_CLR_BIT(DPORT_CTL_REG, DPORT_CTL_DOUBLE_CLK);

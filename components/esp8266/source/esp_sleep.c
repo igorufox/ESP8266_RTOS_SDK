@@ -116,7 +116,7 @@ static inline void save_soc_clk(pm_soc_clk_t *clk)
 
 static inline uint32_t min_sleep_us(pm_soc_clk_t *clk)
 {
-    const uint32_t os_idle_ticks = prvGetExpectedIdleTime();
+    const uint32_t os_idle_ticks = xPortGetExpectedIdleTime(); /* ESPurna: FreeRTOS-Kernel V11, the port gives it */
     const int32_t os_sleep_us = ((int32_t)soc_get_ccompare() - (int32_t)clk->ccount) / g_esp_ticks_per_us +
                                         (os_idle_ticks ? os_idle_ticks - 1 : 0) * portTICK_RATE_MS * 1000;
     const uint32_t ccompare_sleep_us = os_sleep_us > 0 ? os_sleep_us : 0;

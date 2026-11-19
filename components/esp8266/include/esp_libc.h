@@ -38,7 +38,8 @@
 extern "C" {
 #endif
 
-int32_t os_get_random(unsigned char *buf, size_t len);
+/* espurna: int, as os.h of wpa_supplicant and its definition (GCC 14.2: int32_t is long) */
+int os_get_random(unsigned char *buf, size_t len);
 
 /**
   * @brief  put a character to uart or other devices, similar with putc.

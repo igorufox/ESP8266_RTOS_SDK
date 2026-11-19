@@ -12,6 +12,9 @@ idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS "${include_dirs}"
                     PRIV_REQUIRES esp8266 freertos)  
 
+# ESPurna: no stdio streams over the VFS (src/reent_init.c), printf and the rest go to ets_vprintf
+target_compile_definitions(${COMPONENT_LIB} PRIVATE ESPURNA_NO_STDIO)
+
 if(CONFIG_NEWLIB_NANO_FORMAT)
 set(LIBC c_nano)
 else()

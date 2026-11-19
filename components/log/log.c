@@ -241,6 +241,21 @@ out:
 /**
  * @brief Write message into the log
  */
+#ifdef ESPURNA_NO_SDK_LOG
+// ESPurna: the messages of the SDK go out like esp_early_log_write(), by ets_printf (no asprintf / vasprintf, no
+// heap, no putchar of newlib)
+void esp_log_write(esp_log_level_t level, const char *tag,  const char *fmt, ...)
+{
+    va_list va;
+    char prefix = level >= ESP_LOG_MAX ? 'N' : s_log_prefix[level];
+
+    ets_printf("%c (%d) %s: ", prefix, esp_log_early_timestamp(), tag);
+    va_start(va, fmt);
+    ets_vprintf(fmt, va);
+    va_end(va);
+    ets_printf("\n");
+}
+#else
 void esp_log_write(esp_log_level_t level, const char *tag,  const char *fmt, ...)
 {
     int ret;
@@ -299,6 +314,7 @@ out:
 exit:
     _lock_release_recursive(&s_lock);
 }
+#endif
 
 /**
  * @brief Set function used to output log entries

@@ -82,6 +82,8 @@ typedef struct _list_node {
 static const u32_t magic_cookie  = 0x63538263;
 
 static struct netif   *dhcps_netif = NULL;
+/* lwIP 2.2 (esp-lwip 2.2.0-esp) has no dhcps_pcb in struct netif any more: the one pcb of the one AP here (ESPurna package) */
+static struct udp_pcb *s_dhcps_pcb = NULL;
 static ip4_addr_t  broadcast_dhcps;
 static ip4_addr_t server_address;
 static ip4_addr_t dns_server = {0};
@@ -528,7 +530,7 @@ static void send_offer(struct dhcps_msg *m, u16_t len)
 
     ip_addr_t ip_temp = IPADDR4_INIT(0x0);
     ip4_addr_set(ip_2_ip4(&ip_temp), &broadcast_dhcps);
-    struct udp_pcb *pcb_dhcps = dhcps_netif->dhcps_pcb;
+    struct udp_pcb *pcb_dhcps = s_dhcps_pcb;
 #if DHCPS_DEBUG
     SendOffer_err_t = udp_sendto(pcb_dhcps, p, &ip_temp, DHCPS_CLIENT_PORT);
     DHCPS_LOG("dhcps: send_offer>>udp_sendto result %x\n", SendOffer_err_t);
@@ -606,7 +608,7 @@ static void send_nak(struct dhcps_msg *m, u16_t len)
 
     ip_addr_t ip_temp = IPADDR4_INIT(0x0);
     ip4_addr_set(ip_2_ip4(&ip_temp), &broadcast_dhcps);
-    struct udp_pcb *pcb_dhcps = dhcps_netif->dhcps_pcb;
+    struct udp_pcb *pcb_dhcps = s_dhcps_pcb;
 #if DHCPS_DEBUG
     SendNak_err_t = udp_sendto(pcb_dhcps, p, &ip_temp, DHCPS_CLIENT_PORT);
     DHCPS_LOG("dhcps: send_nak>>udp_sendto result %x\n", SendNak_err_t);
@@ -683,7 +685,7 @@ static void send_ack(struct dhcps_msg *m, u16_t len)
 
     ip_addr_t ip_temp = IPADDR4_INIT(0x0);
     ip4_addr_set(ip_2_ip4(&ip_temp), &broadcast_dhcps);
-    struct udp_pcb *pcb_dhcps = dhcps_netif->dhcps_pcb;
+    struct udp_pcb *pcb_dhcps = s_dhcps_pcb;
     SendAck_err_t = udp_sendto(pcb_dhcps, p, &ip_temp, DHCPS_CLIENT_PORT);
 #if DHCPS_DEBUG
     DHCPS_LOG("dhcps: send_ack>>udp_sendto result %x\n", SendAck_err_t);
@@ -1143,18 +1145,18 @@ void dhcps_start(struct netif *netif, ip4_addr_t ip)
 {
     dhcps_netif = netif;
 
-    if (dhcps_netif->dhcps_pcb != NULL) {
-        udp_remove(dhcps_netif->dhcps_pcb);
+    if (s_dhcps_pcb != NULL) {
+        udp_remove(s_dhcps_pcb);
     }
 
-    dhcps_netif->dhcps_pcb = udp_new();
-    struct udp_pcb *pcb_dhcps = dhcps_netif->dhcps_pcb;
+    s_dhcps_pcb = udp_new();
+    struct udp_pcb *pcb_dhcps = s_dhcps_pcb;
 
     if (pcb_dhcps == NULL || ip4_addr_isany_val(ip)) {
         printf("dhcps_start(): could not obtain pcb\n");
     }
 
-    dhcps_netif->dhcps_pcb = pcb_dhcps;
+    s_dhcps_pcb = pcb_dhcps;
 
     IP4_ADDR(&broadcast_dhcps, 255, 255, 255, 255);
 
@@ -1186,10 +1188,10 @@ void dhcps_stop(struct netif *netif)
         return;
     }
 
-    if (apnetif->dhcps_pcb != NULL) {
-        udp_disconnect(apnetif->dhcps_pcb);
-        udp_remove(apnetif->dhcps_pcb);
-        apnetif->dhcps_pcb = NULL;
+    if (s_dhcps_pcb != NULL) {
+        udp_disconnect(s_dhcps_pcb);
+        udp_remove(s_dhcps_pcb);
+        s_dhcps_pcb = NULL;
     }
 
     list_node *pnode = NULL;

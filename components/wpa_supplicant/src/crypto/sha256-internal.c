@@ -56,19 +56,19 @@ sha256_vector(size_t num_elem, const u8 *addr[], const size_t *len,
 
     mbedtls_sha256_init(&ctx);
 
-    if (mbedtls_sha256_starts_ret(&ctx, 0) != 0) {
+    if (mbedtls_sha256_starts(&ctx, 0) != 0) {
         ret = -1;
         goto out;
     }
 
     for(size_t index = 0; index < num_elem; index++) {
-        if (mbedtls_sha256_update_ret(&ctx, addr[index], len[index]) != 0) {
+        if (mbedtls_sha256_update(&ctx, addr[index], len[index]) != 0) {
             ret = -1;
             goto out;
         }
     }
 
-    if (mbedtls_sha256_finish_ret(&ctx, mac) != 0) {
+    if (mbedtls_sha256_finish(&ctx, mac) != 0) {
         ret = -1;
         goto out;
     }

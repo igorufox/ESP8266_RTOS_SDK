@@ -37,6 +37,8 @@ extern "C" {
 #include <stdint.h>
 
 #include "esp_attr.h"
+/* ESPurna (FreeRTOS-Kernel V11): the SDK's 10.0.1 portable.h gave every FreeRTOS user the heap API */
+#include "esp_heap_caps.h"
 
 #include    <xtensa/xtruntime.h>
 #include    "xtensa_rtos.h"
@@ -110,7 +112,8 @@ extern void vTaskSwitchContext( void );				\
 void portYIELD_FROM_ISR(void);
 
 /*-----------------------------------------------------------*/
-extern unsigned cpu_sr;
+/* espurna: uint32_t as its definition in port.c (GCC 14.2: uint32_t is long) */
+extern uint32_t cpu_sr;
 
 /* Critical section management. */
 extern void vPortEnterCritical( void );
@@ -212,11 +215,33 @@ extern void esp_vApplicationTickHook( void );
 extern uint32_t g_esp_ticks_per_us;
 
 /*
- * @brief Get FreeRTOS system idle ticks
+ * @brief Get FreeRTOS system idle ticks (ESPurna: the kernel's static prvGetExpectedIdleTime() of tasks.c through
+ * freertos_tasks_c_additions.h; the SDK's 10.0.1 kernel had it non-static)
  *
  * @return idle ticks
  */
-TickType_t prvGetExpectedIdleTime(void);
+TickType_t xPortGetExpectedIdleTime(void);
+
+/* ESPurna (FreeRTOS-Kernel V11): what the SDK's 10.0.1 kernel had besides the FreeRTOS API, now the port's
+ * (freertos_tasks_c_additions.h, port.c) */
+struct tskTaskControlBlock;
+
+/* the thread local storage pointers with a callback that runs when the task is deleted (pthread keys, errno) */
+typedef void (*TlsDeleteCallbackFunction_t)( int, void * );
+void vTaskSetThreadLocalStoragePointerAndDelCallback( struct tskTaskControlBlock *xTaskToSet, BaseType_t xIndex,
+                                                      void *pvValue, TlsDeleteCallbackFunction_t pvDelCallback );
+void **pvTaskGetThreadLocalStorageBufferPointer( struct tskTaskControlBlock *xTaskToQuery, BaseType_t xIndex );
+
+/* the kernel deletes a task: the delete callbacks of its pointers run (tasks.c prvDeleteTCB) */
+void vPortCleanUpTLS( void **ppvPointers );
+#define portCLEAN_UP_TCB( pxTCB ) vPortCleanUpTLS( ( pxTCB )->pvThreadLocalStoragePointers )
+
+/* the heap of the SDK (heap_caps) behind the kernel's allocation calls (port.c); zalloc / realloc are the SDK's own */
+void *pvPortZalloc( size_t xSize );
+void *pvPortRealloc( void *pv, size_t xSize );
+
+int xPortInIsrContext(void);
+void vPortInitContextFromOldStack(StackType_t *newStackTop, StackType_t *oldStackTop, UBaseType_t stackSize);
 
 #ifdef __cplusplus
 }

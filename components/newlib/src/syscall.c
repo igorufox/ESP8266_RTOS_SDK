@@ -28,7 +28,9 @@
 #include "esp_log.h"
 #include "esp_vfs.h"
 
-#define ERRNO_TLS_INDEX (configNUM_THREAD_LOCAL_STORAGE_POINTERS - 1)
+/* ESPurna (FreeRTOS-Kernel V11): the last of the SDK's portTLS_POINTERS pointers (0 lwIP, 1 pthread, 2 errno); the
+   pointers after them hold their delete callbacks (freertos_tasks_c_additions.h) */
+#define ERRNO_TLS_INDEX (portTLS_POINTERS - 1)
 
 void *_malloc_r(struct _reent *r, size_t n)
 {
@@ -84,6 +86,25 @@ int _getpid_r(struct _reent *r)
 {
     __errno_r(r) = ENOSYS;
     return -1;
+}
+
+/* espurna: newlib 4.3 (GCC 14.2) keeps _getpid_r and _kill_r in one member (signalr.o): the SDK's own _kill_r as well,
+ * else abort() / raise() pulled that member and _getpid_r was defined twice (as ESP-IDF 5 has both) */
+int _kill_r(struct _reent *r, int pid, int sig)
+{
+    __errno_r(r) = ENOSYS;
+    return -1;
+}
+
+/* espurna: newlib 4.3 asks it for the buffering of a FILE (its own _isatty_r wants an _isatty): the console is 0..2 */
+int _isatty_r(struct _reent *r, int fd)
+{
+    if ((fd >= 0) && (fd <= 2)) {
+        return 1;
+    }
+
+    __errno_r(r) = ENOTTY;
+    return 0;
 }
 
 int *__errno(void)

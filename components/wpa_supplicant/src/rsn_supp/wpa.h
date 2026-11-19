@@ -134,7 +134,9 @@ int wpa_michael_mic_failure(u16 isunicast);
 
 wifi_cipher_type_t cipher_type_map_supp_to_public(uint32_t wpa_cipher);
 
-uint32_t cipher_type_map_supp_to_public(wifi_cipher_type_t cipher);
+/* espurna: the name of its definition (wpa.c) - the same name twice was one type with GCC 8.4 (uint32_t = unsigned
+ * int), a conflict with GCC 14.2 (uint32_t = long) */
+uint32_t cipher_type_map_public_to_supp(wifi_cipher_type_t cipher);
 
 void wpa_sta_clear_curr_pmksa(void);
 

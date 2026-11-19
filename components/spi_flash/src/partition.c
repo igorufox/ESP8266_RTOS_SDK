@@ -18,6 +18,14 @@
 #include <stdio.h>
 #include <sys/lock.h>
 
+/* espurna: newlib 4.3 (GCC 14.2) has no _lock_t; the application gets it from the newlib component's sys/lock.h, the
+ * bootloader (one thread, no newlib component) needs no lock at all */
+#if defined(BOOTLOADER_BUILD) && defined(_RETARGETABLE_LOCKING)
+typedef int _lock_t;
+#define _lock_acquire(lock) ((void) (lock))
+#define _lock_release(lock) ((void) (lock))
+#endif
+
 #include "esp_attr.h"
 #include "esp_flash_data_types.h"
 #include "esp_spi_flash.h"

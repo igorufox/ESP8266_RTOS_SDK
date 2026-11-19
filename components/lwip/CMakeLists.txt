@@ -41,7 +41,8 @@ set(srcs
     "lwip/src/core/tcp_out.c"
     "lwip/src/core/timeouts.c"
     "lwip/src/core/udp.c"
-    "lwip/src/core/ipv4/autoip.c"
+    "lwip/src/core/ipv4/acd.c"
+                    "lwip/src/core/ipv4/autoip.c"
     "lwip/src/core/ipv4/dhcp.c"
     "lwip/src/core/ipv4/etharp.c"
     "lwip/src/core/ipv4/icmp.c"
@@ -90,6 +91,7 @@ set(srcs
     "port/${target}/vfs_lwip.c"
     "port/${target}/debug/lwip_debug.c"
     "port/${target}/freertos/sys_arch.c"
+    "port/${target}/lwip_esp8266_hooks.c"
     "port/${target}/netif/dhcp_state.c"
     "port/${target}/netif/wlanif.c")
 
@@ -161,3 +163,6 @@ set_source_files_properties(
     PROPERTIES COMPILE_FLAGS
     -Wno-type-limits
 )
+
+# ESPurna: the VFS of the BSD sockets is not registered (sys_arch.c), sockets / netconn are linked by nobody
+target_compile_definitions(${COMPONENT_LIB} PRIVATE ESPURNA_NO_LWIP_SOCKETS)

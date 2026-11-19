@@ -1051,6 +1051,8 @@ size_t xRingbufferGetCurFreeSize(RingbufHandle_t xRingbuffer)
     return xFreeSize;
 }
 
+/* ESPurna (FreeRTOS-Kernel V11): the queue set API only with configUSE_QUEUE_SETS (10.0.1 declared it always) */
+#if ( configUSE_QUEUE_SETS == 1 )
 BaseType_t xRingbufferAddToQueueSetRead(RingbufHandle_t xRingbuffer, QueueSetHandle_t xQueueSet)
 {
     Ringbuffer_t *pxRingbuffer = (Ringbuffer_t *)xRingbuffer;
@@ -1094,6 +1096,8 @@ BaseType_t xRingbufferRemoveFromQueueSetRead(RingbufHandle_t xRingbuffer, QueueS
     taskEXIT_CRITICAL();
     return xReturn;
 }
+
+#endif /* configUSE_QUEUE_SETS */
 
 void vRingbufferGetInfo(RingbufHandle_t xRingbuffer, UBaseType_t *uxFree, UBaseType_t *uxRead, UBaseType_t *uxWrite, UBaseType_t *uxItemsWaiting)
 {
@@ -1144,6 +1148,7 @@ bool xRingbufferIsNextItemWrapped(RingbufHandle_t xRingbuffer)
     return is_wrapped;
 }
 
+#if ( configUSE_QUEUE_SETS == 1 ) /* ESPurna: FreeRTOS-Kernel V11, as above */
 BaseType_t xRingbufferAddToQueueSetWrite(RingbufHandle_t xRingbuffer, QueueSetHandle_t xQueueSet)
 {
     //This function is deprecated. QueueSetWrite no longer supported
@@ -1181,4 +1186,4 @@ BaseType_t xRingbufferRemoveFromQueueSetWrite(RingbufHandle_t xRingbuffer, Queue
     portEXIT_CRITICAL();
     return xReturn;
 }
-
+#endif /* configUSE_QUEUE_SETS */

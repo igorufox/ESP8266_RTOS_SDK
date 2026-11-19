@@ -288,6 +288,13 @@ esp_err_t esp_read_mac(uint8_t* mac, esp_mac_type_t type)
     }
 
     if (esp_base_mac_addr_get(efuse_mac) != ESP_OK) {
+#if !CONFIG_ESP8266_WIFI_NVS_ENABLED && !CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE
+        /* ESPurna: no NVS, the efuse MAC (esp_mac_init) */
+        if (esp_efuse_mac_get_default(efuse_mac) != ESP_OK) {
+            ESP_LOGE(TAG, "Get mac address error");
+            abort();
+        }
+#else
         if (load_backup_mac_data(efuse_mac) != ESP_OK) {
             if (esp_efuse_mac_get_default(efuse_mac) != ESP_OK) {
                 ESP_LOGE(TAG, "Get mac address error");
@@ -296,6 +303,7 @@ esp_err_t esp_read_mac(uint8_t* mac, esp_mac_type_t type)
                 store_backup_mac_data();
             }
         }
+#endif
     }
 
     switch (type) {
@@ -318,6 +326,15 @@ esp_err_t esp_mac_init(void)
     esp_err_t ret;
     uint8_t efuse_mac[6];
 
+#if !CONFIG_ESP8266_WIFI_NVS_ENABLED && !CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE
+    /* ESPurna: no NVS in the build, the MAC straight from the efuse (as the NONOS SDK reads it), no backup copy */
+    if ((ret = esp_efuse_mac_get_default(efuse_mac)) != ESP_OK) {
+        ESP_LOGE(TAG, "Get mac address error=%d", ret);
+        return ESP_ERR_INVALID_MAC;
+    }
+
+    return ESP_OK;
+#else
     if ((ret = nvs_flash_init()) != ESP_OK) {
         ESP_LOGE(TAG, "Init NVS error=%d", ret);
         return ESP_ERR_INVALID_MAC;
@@ -339,6 +356,7 @@ esp_err_t esp_mac_init(void)
     }
 
     return ESP_OK;
+#endif
 }
 
 /**

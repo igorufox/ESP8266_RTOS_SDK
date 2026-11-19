@@ -139,7 +139,9 @@ Derviation of clock divisor for timer tick and interrupt (one per tick).
 #define XT_TICK_DIVISOR     (XT_CLOCK_FREQ / XT_TICK_PER_SEC)
 #else
 #ifndef __ASSEMBLER__
-extern unsigned _xt_tick_divisor;
+#include <stdint.h>
+/* espurna: uint32_t as its definition (GCC 14.2: uint32_t is long, no more unsigned) */
+extern uint32_t _xt_tick_divisor;
 #endif
 #define XT_TICK_DIVISOR     _xt_tick_divisor
 #endif

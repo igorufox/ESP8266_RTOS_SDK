@@ -96,6 +96,8 @@ void sys_delay_ms(uint32_t ms);
 sys_sem_t* sys_thread_sem_init(void);
 void sys_thread_sem_deinit(void);
 sys_sem_t* sys_thread_sem_get(void);
+/* esp-lwip 2.1.3 declared it in lwip/sys.h (ESPurna package) */
+int sys_sem_signal_isr(sys_sem_t *sem);
 
 #ifdef __cplusplus
 }

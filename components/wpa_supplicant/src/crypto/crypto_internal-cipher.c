@@ -1,3 +1,7 @@
+/* ESPurna: the supplicant's own AES (aes-internal, which the crypto table of the closed Wi-Fi library uses anyway), not
+ * a second AES from mbedtls: mbedtls stays for the big numbers and curves of WPA3 SAE alone */
+#undef USE_MBEDTLS_CRYPTO
+
 /*
  * Crypto wrapper for internal crypto implementation - Cipher wrappers
  * Copyright (c) 2006-2009, Jouni Malinen <j@w1.fi>
@@ -28,6 +32,9 @@
 #if defined(CONFIG_DES) || defined(CONFIG_DES3)
 #include "des_i.h"
 #endif
+/* ESPurna: after the includes (supplicant_opt.h defines it again) */
+#undef USE_MBEDTLS_CRYPTO
+
 #ifdef USE_MBEDTLS_CRYPTO
 #include "mbedtls/aes.h"
 #endif /* USE_MBEDTLS_CRYPTO */

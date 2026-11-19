@@ -210,3 +210,78 @@ void _lock_release(_lock_t *lock) {
 void _lock_release_recursive(_lock_t *lock) {
     lock_release_generic(lock, queueQUEUE_TYPE_RECURSIVE_MUTEX);
 }
+
+#if defined(_RETARGETABLE_LOCKING)
+/* espurna: newlib 4.3 of GCC 14.2 (regress-todo.md item 35) is built with _RETARGETABLE_LOCKING. As ESP-IDF 5.5
+ * (components/newlib/src/locks.c): _LOCK_T is a pointer to struct __lock, the same as the SemaphoreHandle_t the legacy
+ * _lock_t held; newlib's own static locks are two static FreeRTOS mutexes, made before anything of newlib locks
+ * (esp_newlib_init()). */
+
+_Static_assert(sizeof(struct __lock) >= sizeof(StaticSemaphore_t), "struct __lock (sys/lock.h) too small");
+_Static_assert(configSUPPORT_STATIC_ALLOCATION, "FreeRTOS without static allocation");
+
+static StaticSemaphore_t s_common_mutex;
+static StaticSemaphore_t s_common_recursive_mutex;
+
+void __retarget_lock_init(_LOCK_T *lock) {
+    *lock = NULL;
+    lock_init_generic(lock, queueQUEUE_TYPE_MUTEX);
+}
+
+void __retarget_lock_init_recursive(_LOCK_T *lock) {
+    *lock = NULL;
+    lock_init_generic(lock, queueQUEUE_TYPE_RECURSIVE_MUTEX);
+}
+
+void __retarget_lock_close(_LOCK_T lock) {
+    _lock_close(&lock);
+}
+
+void __retarget_lock_close_recursive(_LOCK_T lock) {
+    _lock_close_recursive(&lock);
+}
+
+void __retarget_lock_acquire(_LOCK_T lock) {
+    _lock_acquire(&lock);
+}
+
+void __retarget_lock_acquire_recursive(_LOCK_T lock) {
+    _lock_acquire_recursive(&lock);
+}
+
+int __retarget_lock_try_acquire(_LOCK_T lock) {
+    return _lock_try_acquire(&lock);
+}
+
+int __retarget_lock_try_acquire_recursive(_LOCK_T lock) {
+    return _lock_try_acquire_recursive(&lock);
+}
+
+void __retarget_lock_release(_LOCK_T lock) {
+    _lock_release(&lock);
+}
+
+void __retarget_lock_release_recursive(_LOCK_T lock) {
+    _lock_release_recursive(&lock);
+}
+
+/* the static locks newlib names (sys/lock.h __LOCK_INIT: &__lock_<name>) */
+extern StaticSemaphore_t __attribute__((alias("s_common_recursive_mutex"))) __lock___sinit_recursive_mutex;
+extern StaticSemaphore_t __attribute__((alias("s_common_recursive_mutex"))) __lock___malloc_recursive_mutex;
+extern StaticSemaphore_t __attribute__((alias("s_common_recursive_mutex"))) __lock___env_recursive_mutex;
+extern StaticSemaphore_t __attribute__((alias("s_common_recursive_mutex"))) __lock___sfp_recursive_mutex;
+extern StaticSemaphore_t __attribute__((alias("s_common_recursive_mutex"))) __lock___atexit_recursive_mutex;
+extern StaticSemaphore_t __attribute__((alias("s_common_mutex"))) __lock___at_quick_exit_mutex;
+extern StaticSemaphore_t __attribute__((alias("s_common_mutex"))) __lock___tz_mutex;
+extern StaticSemaphore_t __attribute__((alias("s_common_mutex"))) __lock___dd_hash_mutex;
+extern StaticSemaphore_t __attribute__((alias("s_common_mutex"))) __lock___arc4random_mutex;
+
+void esp_newlib_locks_init(void) {
+    SemaphoreHandle_t handle;
+    handle = xSemaphoreCreateMutexStatic(&s_common_mutex);
+    configASSERT(handle == (SemaphoreHandle_t) &s_common_mutex);
+    handle = xSemaphoreCreateRecursiveMutexStatic(&s_common_recursive_mutex);
+    configASSERT(handle == (SemaphoreHandle_t) &s_common_recursive_mutex);
+    (void) handle;
+}
+#endif /* _RETARGETABLE_LOCKING */

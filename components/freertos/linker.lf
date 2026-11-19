@@ -13,3 +13,11 @@ entries:
 
     if FREERTOS_CODE_LINK_TO_IRAM = y:
         * (noflash_text)
+    elif TASK_SWITCH_FASTER = y:
+        # ESPurna: the task switch in IRAM (TASK_SW_ATTR of the SDK's 10.0.1 kernel, which the kernel package does not
+        # carry): the tick, the switch and the list calls they make
+        tasks:xTaskIncrementTick (noflash_text)
+        tasks:vTaskSwitchContext (noflash_text)
+        tasks:vTaskStepTick (noflash_text)
+        list:vListInsertEnd (noflash_text)
+        list:uxListRemove (noflash_text)

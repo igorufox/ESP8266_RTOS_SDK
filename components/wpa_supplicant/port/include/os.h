@@ -15,6 +15,9 @@
 #ifndef OS_H
 #define OS_H
 #include "esp_types.h"
+/* espurna: time_t, suseconds_t (newlib 4.3 of GCC 14.2 brings them in no other header of these) */
+#include <sys/types.h>
+#include <time.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>

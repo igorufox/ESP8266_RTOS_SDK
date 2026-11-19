@@ -104,6 +104,9 @@ function(__build_set_default_build_specifications)
                                     "-Wno-error=unused-but-set-variable"
                                     "-Wno-error=unused-variable"
                                     "-Wno-error=deprecated-declarations"
+                                    # espurna: GCC 14.2 xtensa-esp-elf, int32_t / uint32_t are long (8.4 lx106:
+                                    # int); the SDK's %d of a uint32_t is a warning, 32 bits either way
+                                    "-Wno-error=format"
                                     "-Wextra"
                                     "-Wno-unused-parameter"
                                     "-Wno-sign-compare"

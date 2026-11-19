@@ -255,6 +255,18 @@
  */
 #define DHCP_DOES_ARP_CHECK             CONFIG_LWIP_DHCP_DOES_ARP_CHECK
 
+/**
+ * ESPurna (lwIP 2.2): the check of an offered address is address conflict detection (acd.c, RFC 5227) under
+ * LWIP_DHCP_DOES_ACD_CHECK, on by default with DHCP: up to 1 s of wait, three probes 1-2 s apart and 2 s before the
+ * announcement - the address came 5-8 s after the ACK, the station's attempt ran out of time and its disconnect
+ * crashed the Wi-Fi library (18.11). As ESP-IDF does: by the menuconfig option of the ARP check (off).
+ */
+#ifdef CONFIG_LWIP_DHCP_DOES_ARP_CHECK
+#define LWIP_DHCP_DOES_ACD_CHECK        1
+#else
+#define LWIP_DHCP_DOES_ACD_CHECK        0
+#endif
+
 
 /**
  * CONFIG_LWIP_DHCP_RESTORE_LAST_IP==1: Last valid IP address obtained from DHCP server
@@ -1146,5 +1158,14 @@ void tcp_print_status(int status, void* p, uint32_t tmp1, uint32_t tmp2, uint32_
     } while (0);
 
 #define SOC_SEND_LOG //printf
+
+/* ESPurna package, esp-lwip 2.2.0-esp: what esp-lwip 2.1.3 defined itself (ref. port/esp8266/lwip_esp8266_hooks.c) */
+#define LWIP_HOOK_FILENAME              "lwip_esp8266_hooks.h"
+#define LWIP_NETCONN_THREAD_SEM_GET()   sys_thread_sem_get()
+#define LWIP_NETCONN_THREAD_SEM_ALLOC() sys_thread_sem_init()
+#define LWIP_NETCONN_THREAD_SEM_FREE()  sys_thread_sem_deinit()
+#ifndef LWIP_NETIF_EXT_STATUS_CALLBACK
+#define LWIP_NETIF_EXT_STATUS_CALLBACK  1
+#endif
 
 #endif /* __LWIPOPTS_H__ */

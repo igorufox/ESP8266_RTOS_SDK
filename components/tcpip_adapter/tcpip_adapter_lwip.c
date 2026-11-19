@@ -45,6 +45,8 @@
 
 #include "FreeRTOS.h"
 #include "timers.h"
+/* netif_set_garp_flag(), dhcp_set_cb(): the port of esp-lwip 2.2.0-esp (ESPurna package) */
+#include "lwip_esp8266_hooks.h"
 
 struct tcpip_adapter_pbuf {
     struct pbuf_custom  pbuf;

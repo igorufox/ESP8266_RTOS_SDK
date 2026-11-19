@@ -16,7 +16,6 @@ set(srcs "port/os_xtensa.c"
     "src/crypto/aes-internal-enc.c"
     "src/crypto/aes-internal.c"
     "src/crypto/aes-omac1.c"
-    "src/crypto/aes-unwrap.c"
     "src/crypto/aes-wrap.c"
     "src/crypto/aes-omac1.c"
     "src/crypto/bignum.c"
@@ -34,13 +33,7 @@ set(srcs "port/os_xtensa.c"
     "src/crypto/dh_group5.c"
     "src/crypto/dh_groups.c"
     "src/crypto/md4-internal.c"
-    "src/crypto/md5-internal.c"
-    "src/crypto/md5.c"
     "src/crypto/ms_funcs.c"
-    "src/crypto/rc4.c"
-    "src/crypto/sha1-internal.c"
-    "src/crypto/sha1-pbkdf2.c"
-    "src/crypto/sha1.c"
     "src/crypto/sha256-internal.c"
     "src/crypto/sha256.c"
     "src/crypto/sha1-tlsprf.c"
@@ -121,6 +114,9 @@ else()
     set(roaming_src "")
 endif()
 
+# ESPurna: SHA1, MD5, their HMACs, PBKDF2-SHA1, the SHA1 PRF, RC4 and the AES key unwrap of these files are in the chip's
+# ROM under the same names (the NONOS SDK used those): esp8266/ld/esp8266.rom.ld gives the linker their addresses, the
+# image does not carry a second copy
 idf_component_register(SRCS "${srcs}" "${tls_src}" "${roaming_src}"
                     INCLUDE_DIRS include port/include include/esp_supplicant
                     PRIV_INCLUDE_DIRS src

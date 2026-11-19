@@ -66,3 +66,24 @@ PROVIDE ( rom_i2c_writeReg = 0x400072d8 );
 PROVIDE ( rom_i2c_writeReg_Mask = 0x4000730c );
 
 PROVIDE ( rom_software_reboot = 0x40000080 );
+
+/* ESPurna: the wpa_supplicant crypto of the ROM (the addresses of the NONOS SDK's eagle.rom.addr.v6.ld, the same chip
+   ROM); components/wpa_supplicant no longer builds these files of its own (sha1-internal, sha1, sha1-pbkdf2,
+   md5-internal, md5, rc4, aes-unwrap) */
+PROVIDE ( SHA1Init = 0x4000b584 );
+PROVIDE ( SHA1Update = 0x4000b5a8 );
+PROVIDE ( SHA1Final = 0x4000b648 );
+PROVIDE ( SHA1Transform = 0x4000a364 );
+PROVIDE ( sha1_vector = 0x4000a2ec );
+PROVIDE ( hmac_sha1_vector = 0x4000b8b4 );
+PROVIDE ( hmac_sha1 = 0x4000ba28 );
+PROVIDE ( sha1_prf = 0x4000ba48 );
+PROVIDE ( pbkdf2_sha1 = 0x4000b840 );
+PROVIDE ( MD5Init = 0x40009818 );
+PROVIDE ( MD5Update = 0x40009834 );
+PROVIDE ( MD5Final = 0x40009900 );
+PROVIDE ( md5_vector = 0x400097ac );
+PROVIDE ( hmac_md5_vector = 0x4000a160 );
+PROVIDE ( hmac_md5 = 0x4000a2cc );
+PROVIDE ( rc4_skip = 0x4000dd68 );
+PROVIDE ( aes_unwrap = 0x40009410 );

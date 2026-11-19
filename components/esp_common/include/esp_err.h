@@ -21,7 +21,9 @@
 extern "C" {
 #endif
 
-typedef int32_t esp_err_t;
+/* espurna: int, as ESP-IDF 5 (GCC 14.2: int32_t is long, and every esp_err_t function of the SDK is defined with int;
+ * the same 32 bits for the closed libraries) */
+typedef int esp_err_t;
 
 /* Definitions for error constants. */
 #define ESP_OK          0       /*!< esp_err_t value indicating success (no error) */

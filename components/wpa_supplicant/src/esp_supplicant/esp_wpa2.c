@@ -63,7 +63,8 @@ static int wpa2_start_eapol_internal(void);
 int wpa2_post(uint32_t sig, uint32_t par);
 
 #ifdef USE_WPA2_TASK
-static void *s_wpa2_task_hdl = NULL;
+/* espurna: a TaskHandle_t (xTaskCreate takes TaskHandle_t *: an incompatible pointer type with GCC 14.2) */
+static TaskHandle_t s_wpa2_task_hdl = NULL;
 static void *s_wpa2_queue = NULL;
 static wpa2_state_t s_wpa2_state = WPA2_STATE_DISABLED;
 static void *s_wpa2_api_lock = NULL;

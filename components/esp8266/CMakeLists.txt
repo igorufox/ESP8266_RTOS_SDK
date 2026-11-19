@@ -150,3 +150,6 @@ else()
     endif()
 
 endif()
+
+# ESPurna: no pthread (startup.c: no esp_pthread_init; lwIP keeps its per-thread semaphore in a FreeRTOS TLS pointer)
+target_compile_definitions(${COMPONENT_LIB} PRIVATE ESPURNA_NO_PTHREAD)

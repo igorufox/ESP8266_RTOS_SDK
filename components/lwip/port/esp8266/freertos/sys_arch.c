@@ -45,7 +45,23 @@ static const char* TAG = "lwip_arch";
 
 static sys_mutex_t g_lwip_protect_mutex = NULL;
 
+#ifdef ESPURNA_NO_LWIP_SOCKETS
+// ESPurna: the per-thread semaphore in a thread local storage pointer of FreeRTOS, no pthread keys (no pthread at all)
+#define ESPURNA_SEM_TLS_INDEX 0  /* the SDK's slot of lwIP (0 lwIP, 1 pthread, 2 errno) */
+static void sys_thread_sem_free(void* data);
+static void sys_thread_sem_deleted(int index, void* data)
+{
+  (void)index;
+  sys_thread_sem_free(data);
+}
+#define sys_thread_sem_getspecific() pvTaskGetThreadLocalStoragePointer(NULL, ESPURNA_SEM_TLS_INDEX)
+#define sys_thread_sem_setspecific(value) \
+  vTaskSetThreadLocalStoragePointerAndDelCallback(NULL, ESPURNA_SEM_TLS_INDEX, (value), sys_thread_sem_deleted)
+#else
 static pthread_key_t sys_thread_sem_key;
+#define sys_thread_sem_getspecific() pthread_getspecific(sys_thread_sem_key)
+#define sys_thread_sem_setspecific(value) pthread_setspecific(sys_thread_sem_key, (value))
+#endif
 static void sys_thread_sem_free(void* data);
 
 #if !LWIP_COMPAT_MUTEX
@@ -428,10 +444,15 @@ sys_init(void)
     }
   }
 
+#ifndef ESPURNA_NO_LWIP_SOCKETS
   // Create the pthreads key for the per-thread semaphore storage
   pthread_key_create(&sys_thread_sem_key, sys_thread_sem_free);
+#endif
 
+  // ESPurna: no BSD sockets (its own TCP / UDP on the raw API): nothing registers them, the linker drops them
+#ifndef ESPURNA_NO_LWIP_SOCKETS
   esp_vfs_lwip_sockets_register();
+#endif
 }
 
 /**
@@ -491,7 +512,7 @@ sys_arch_unprotect(sys_prot_t pval)
 sys_sem_t*
 sys_thread_sem_get(void)
 {
-  sys_sem_t *sem = pthread_getspecific(sys_thread_sem_key);
+  sys_sem_t *sem = sys_thread_sem_getspecific();
 
   if (!sem) {
       sem = sys_thread_sem_init();
@@ -533,17 +554,17 @@ sys_thread_sem_init(void)
     return 0;
   }
 
-  pthread_setspecific(sys_thread_sem_key, sem);
+  sys_thread_sem_setspecific(sem);
   return sem;
 }
 
 void
 sys_thread_sem_deinit(void)
 {
-  sys_sem_t *sem = pthread_getspecific(sys_thread_sem_key);
+  sys_sem_t *sem = sys_thread_sem_getspecific();
   if (sem != NULL) {
     sys_thread_sem_free(sem);
-    pthread_setspecific(sys_thread_sem_key, NULL);
+    sys_thread_sem_setspecific(NULL);
   }
 }
 

@@ -1,3 +1,5 @@
+This branch is ESP8266_RTOS_SDK (master 858c7c2e) as used by ESPurna firmware: FreeRTOS-Kernel V11.1.0, esp-lwip 2.2.0 and mbedTLS 3.6.6 come from their own packages, plus ESPurna's changes for its bootloader and a smaller image; it is a PlatformIO package (package.json). Releases are made by GitHub Actions from the version of package.json: `<SDK version>-espurna.<N>`.
+
 # ESP8266 RTOS Software Development Kit
 
 [![Documentation Status](https://readthedocs.com/projects/espressif-esp8266-rtos-sdk/badge/?version=latest)](https://docs.espressif.com/projects/esp8266-rtos-sdk/en/latest/?badge=latest)

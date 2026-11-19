@@ -37,7 +37,9 @@ typedef enum {
 } esp_image_spi_mode_t;
 
 /* SPI flash clock frequency */
-enum {
+/* espurna: a type, as in ESP-IDF (it was a variable defined in every file: a multiple definition with GCC 14.2,
+ * -fno-common) */
+typedef enum {
     ESP_IMAGE_SPI_SPEED_40M,
     ESP_IMAGE_SPI_SPEED_26M,
     ESP_IMAGE_SPI_SPEED_20M,

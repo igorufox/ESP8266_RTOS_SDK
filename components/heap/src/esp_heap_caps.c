@@ -92,6 +92,37 @@ size_t heap_caps_get_minimum_free_size(uint32_t caps)
 }
 
 /**
+ * @brief The largest block one malloc with the given capabilities can take (ESPurna: the API of ESP-IDF; the free
+ * bytes alone said nothing of the fragmentation of the heap)
+ */
+size_t heap_caps_get_largest_free_block(uint32_t caps)
+{
+    size_t largest = 0;
+
+    for (int num = 0; num < g_heap_region_num; num++) {
+        if ((g_heap_region[num].caps & caps) != caps)
+            continue;
+
+        _heap_caps_lock(num);
+
+        mem_blk_t *mem_blk = (mem_blk_t *)g_heap_region[num].free_blk;
+        while (mem_blk && !mem_blk_is_end(mem_blk)) {
+            if (!mem_blk_is_used(mem_blk)) {
+                const size_t size = blk_link_size(mem_blk);
+                const size_t head = mem_blk_head_size(false);
+                if ((size > head) && ((size - head) > largest))
+                    largest = size - head;
+            }
+            mem_blk = mem_blk_next(mem_blk);
+        }
+
+        _heap_caps_unlock(num);
+    }
+
+    return largest;
+}
+
+/**
  * @brief Allocate a chunk of memory which has the given capabilities
  */
 void IRAM_ATTR *_heap_caps_malloc(size_t size, uint32_t caps, const char *file, size_t line)

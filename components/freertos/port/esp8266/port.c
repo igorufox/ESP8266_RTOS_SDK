@@ -41,6 +41,7 @@
 #include "freertos/xtensa_rtos.h"
 
 #include "esp_attr.h"
+#include "esp_heap_caps.h"
 #include "esp_libc.h"
 #include "esp_task_wdt.h"
 #include "esp_sleep.h"
@@ -69,6 +70,8 @@ uint64_t g_esp_os_us;
 uint64_t g_esp_os_cpu_clk;
 
 static uint32_t s_switch_ctx_flag;
+
+#define ISR_STACK_PATTERN   0xa5a5a5a5
 
 void vPortEnterCritical(void);
 void vPortExitCritical(void);
@@ -163,13 +166,25 @@ void IRAM_ATTR xPortSysTickHandle(void *p)
 
     ticks = us / 1000 / portTICK_PERIOD_MS;
 
-    if (ticks > 1) {
-        vTaskStepTick(ticks - 1);
+    /* ESPurna (FreeRTOS-Kernel V11): the ticks lost while the interrupts were closed (flash, the PHY calibration of the
+     * ROM) one by one through the kernel's tick. vTaskStepTick() is the tickless sleep's, for a suspended scheduler
+     * only: V11 asserts it never jumps past the next unblock time and counts that tick as pended (the SDK's 10.0.1
+     * kernel only added to xTickCount). */
+    BaseType_t switch_required = pdFALSE;
+
+    if (ticks == 0) {
+        ticks = 1;
     }
 
-    g_esp_os_ticks++;
+    while (ticks--) {
+        g_esp_os_ticks++;
 
-    if (xTaskIncrementTick() != pdFALSE) {
+        if (xTaskIncrementTick() != pdFALSE) {
+            switch_required = pdTRUE;
+        }
+    }
+
+    if (switch_required != pdFALSE) {
         portYIELD_FROM_ISR();
     }
 }
@@ -196,6 +211,17 @@ portBASE_TYPE xPortStartScheduler(void)
      * Todo: Remove this one when refactor startup function.
      */
     cpu_sr = 0x20;
+
+    /* DIAG 11-19 (ESPurna, temporary): the interrupt stack (CONFIG_FREERTOS_ISR_STACKSIZE, xtensa_vectors.S, every
+     * level 1 handler and the task switch run on it) filled with a pattern, the idle hook reports how much of it the
+     * deepest interrupt left (below it: _chip_nmi_cnt, the NMI's save area pick) */
+    {
+        extern uint32_t _chip_interrupt_stk[];
+
+        for (int i = 0; i < (CONFIG_FREERTOS_ISR_STACKSIZE / 4); i++) {
+            _chip_interrupt_stk[i] = ISR_STACK_PATTERN;
+        }
+    }
 
     /*******software isr*********/
     _xt_isr_attach(ETS_SOFT_INUM, SoftIsrHdl, NULL);
@@ -385,6 +411,62 @@ int xPortInIsrContext(void)
     return s_xt_isr_status != 0;
 }
 
+/* DIAG 11-19 (ESPurna, temporary): the nesting of the port's critical section, for the list checks of
+ * freertos_tasks_c_additions.h (a task that blocks inside it cannot yield) */
+UBaseType_t uxPortCriticalNesting(void)
+{
+    return uxCriticalNesting;
+}
+
+/* DIAG 11-19 (ESPurna, temporary): the untouched bottom of the interrupt stack, checked from the idle hook (task
+ * context: an interrupt that prints would itself eat the stack it reports on). The first 32 words only, cheap enough
+ * for every idle pass; once less than 96 bytes stayed untouched it prints the exact figure once */
+static void isr_stack_check(void)
+{
+    extern uint32_t _chip_interrupt_stk[];
+    static int s_reported;
+
+    if (s_reported) {
+        return;
+    }
+
+    int words = 0;
+    while ((words < 32) && (_chip_interrupt_stk[words] == ISR_STACK_PATTERN)) {
+        words++;
+    }
+
+    if (words < 24) {
+        s_reported = 1;
+        ets_printf("DIAG isr stack: %d of %d bytes never used\n", words * 4, CONFIG_FREERTOS_ISR_STACKSIZE);
+    }
+}
+
+/* DIAG 11-18 (ESPurna): configASSERT of the kernel */
+extern UBaseType_t uxPortSchedulerSuspended(void);
+void IRAM_ATTR vPortAssert(const char *file, int line, void *caller)
+{
+    portDISABLE_INTERRUPTS();
+    ets_printf("DIAG assert %s:%d from %p task %s susp %u isr %d nmi %d\n", file, line, caller,
+               xTaskGetCurrentTaskHandle() ? pcTaskGetName(NULL) : "-", (unsigned) uxPortSchedulerSuspended(),
+               s_xt_isr_status != 0, NMIIrqIsOn);
+    abort();
+}
+
+/* DIAG 11-18 (ESPurna, temporary): FreeRTOSConfig.h trace macros */
+static uint32_t s_trace_blocking;
+
+void vPortTraceBlocking(const char *what, void *object, void *caller)
+{
+    /* the kernel suspends the scheduler itself right before these trace points: a second level is somebody else's */
+    const int suspended = uxPortSchedulerSuspended() >= 2;
+    const int isr = s_xt_isr_status != 0;
+    if ((suspended || isr || NMIIrqIsOn) && (s_trace_blocking < 40)) {
+        ++s_trace_blocking;
+        ets_printf("DIAG blocking %s %p from %p task %s susp %d isr %d nmi %d\n", what, object, caller,
+                   pcTaskGetName(NULL), suspended, isr, NMIIrqIsOn);
+    }
+}
+
 void __attribute__((weak, noreturn)) vApplicationStackOverflowHook(xTaskHandle xTask, const char *pcTaskName)
 {
     ets_printf("***ERROR*** A stack overflow in task %s has been detected.\r\n", pcTaskName);
@@ -415,25 +497,81 @@ BaseType_t xQueueGenericReceive(QueueHandle_t xQueue, void * const pvBuffer,
 
 void esp_internal_idle_hook(void)
 {
+    isr_stack_check();
+
     esp_task_wdt_reset();
 
     esp_sleep_start();
 }
 
 #ifndef DISABLE_FREERTOS
+/* ESPurna (FreeRTOS-Kernel V11): the SDK's 10.0.1 kernel called the SDK's idle and tick work from its own patched
+ * tasks.c; the kernel package is unchanged, so the hooks of the kernel do it */
 #if configUSE_IDLE_HOOK == 1
-void __attribute__((weak)) vApplicationIdleHook(void)
+void vApplicationIdleHook(void)
 {
-
+#ifdef CONFIG_FREERTOS_EXTENED_HOOKS
+    esp_vApplicationIdleHook();
+#endif
+    esp_internal_idle_hook();
 }
 #endif
 
 #if configUSE_TICK_HOOK == 1
-void __attribute__((weak)) vApplicationTickHook(void)
+void vApplicationTickHook(void)
 {
-
+#ifdef CONFIG_FREERTOS_EXTENED_HOOKS
+    esp_vApplicationTickHook();
+#endif
 }
 #endif
+
+/* the delete callbacks of a deleted task's thread local storage pointers (portCLEAN_UP_TCB) */
+void vPortCleanUpTLS(void **ppvPointers)
+{
+    for (int x = 0; x < portTLS_POINTERS; x++) {
+        TlsDeleteCallbackFunction_t callback = (TlsDeleteCallbackFunction_t)ppvPointers[portTLS_POINTERS + x];
+        if (callback) {
+            callback(x, ppvPointers[x]);
+        }
+    }
+}
+
+/* the kernel's allocations on the SDK's heap, as the SDK's 10.0.1 portable.h mapped them */
+void *pvPortMalloc(size_t xSize)
+{
+    return heap_caps_malloc(xSize, MALLOC_CAP_8BIT | MALLOC_CAP_32BIT | MALLOC_CAP_DMA);
+}
+
+void vPortFree(void *pv)
+{
+    heap_caps_free(pv);
+}
+
+void *pvPortCalloc(size_t xNum, size_t xSize)
+{
+    return heap_caps_calloc(xNum, xSize, MALLOC_CAP_32BIT);
+}
+
+void *pvPortZalloc(size_t xSize)
+{
+    return heap_caps_zalloc(xSize, MALLOC_CAP_32BIT);
+}
+
+void *pvPortRealloc(void *pv, size_t xSize)
+{
+    return heap_caps_realloc(pv, xSize, MALLOC_CAP_32BIT);
+}
+
+size_t xPortGetFreeHeapSize(void)
+{
+    return heap_caps_get_free_size(MALLOC_CAP_32BIT);
+}
+
+size_t xPortGetMinimumEverFreeHeapSize(void)
+{
+    return heap_caps_get_minimum_free_size(MALLOC_CAP_32BIT);
+}
 #endif
 
 uint32_t xPortGetTickRateHz(void)
