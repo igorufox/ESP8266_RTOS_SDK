@@ -33,8 +33,12 @@ jobs:
 
       - name: Package
         run: |
+          # the files of git, the submodules included (20.11: `zip -r .` with excludes exited 0 and wrote nothing)
           mkdir -p dist
-          zip -r -q "dist/$ZIP" . -x '.git/*' '*/.git' '*/.git/*' 'dist/*'
+          git ls-files --recurse-submodules | zip -q "dist/$ZIP" -@
+          ls -l "dist/$ZIP"
+          test -s "dist/$ZIP"
+          unzip -l "dist/$ZIP" | grep -q "components/lwip/lwip/src/core/tcp.c"
 
       - uses: actions/upload-artifact@v4
         with:
