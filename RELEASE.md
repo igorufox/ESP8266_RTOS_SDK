@@ -5,3 +5,5 @@ ESP8266_RTOS_SDK master 858c7c2e for ESPurna: FreeRTOS 11.1.0, esp-lwip 2.2.0 (f
 3.4.0-espurna.3: the release carries the package zip (with the lwip submodule), ESPurna points at it; the SDK is 3.4.0-espurna.2.
 
 3.4.0-espurna.4: the package is the SDK COMPILED by the release (tools/espurna/build.py, as Espressif's lib-builder for Arduino-ESP32): archives, headers, sdkconfig, linker scripts and the flags of the app and of the bootloader (flags.json); the firmware only links it. The configuration is tools/espurna/sdkconfig.defaults. The bootloader calls the weak bootloader_after_init() (bootloader_hooks.h), the firmware links its own; no ESPurna code in the SDK.
+
+3.4.0-espurna.5: the headers the build writes (the forwards of the freertos component to the kernel) included the kernel by the full path of the CI machine: the package now carries those headers and includes them by relative paths; build.py stops on a full path left in a header, its test app includes the kernel, Wi-Fi, lwIP and Mbed TLS headers.

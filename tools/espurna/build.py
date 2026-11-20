@@ -99,6 +99,40 @@ class Package:
         return token
 
 
+    def local_includes(self):
+        """the headers the build writes (the freertos component's forwards: #include "<kernel>/include/FreeRTOS.h")
+        name their sources by full paths of the build machine: those sources go into the package (with the other
+        headers of their folder) and the #include becomes relative; a full path left in a header stops the build
+        (3.4.0-espurna.4: /home/runner/deps/kernel/... in the release, nothing compiled against it)"""
+        import re
+        pattern = re.compile(r'(#\s*include\s*")((?:/|[A-Za-z]:[/\\])[^"]+)(")')
+        include_root = os.path.join(self.out, "include")
+        for folder, _, names in os.walk(include_root):
+            for name in names:
+                path = os.path.join(folder, name)
+                with open(path, encoding="utf-8", errors="surrogateescape") as f:
+                    text = f.read()
+                if not pattern.search(text):
+                    continue
+
+                def relative(match):
+                    source = match.group(2)
+                    _, inside = self.where(source)
+                    if inside is None:
+                        raise SystemExit("build.py: %s includes %s, outside the package" % (path, source))
+                    self.include(os.path.dirname(source))
+                    target = os.path.join(include_root, inside)
+                    return match.group(1) + os.path.relpath(target, folder).replace(os.sep, "/") + match.group(3)
+
+                with open(path, "w", encoding="utf-8", errors="surrogateescape", newline="\n") as f:
+                    f.write(pattern.sub(relative, text))
+        for folder, _, names in os.walk(include_root):
+            for name in names:
+                with open(os.path.join(folder, name), encoding="utf-8", errors="surrogateescape") as f:
+                    if pattern.search(f.read()):
+                        raise SystemExit("build.py: a full path is left in %s" % os.path.join(folder, name))
+
+
 def compile_flags(package, commands_path, c_suffix, cxx_suffix):
     with open(commands_path, encoding="utf-8") as f:
         commands = json.load(f)
@@ -110,7 +144,10 @@ def compile_flags(package, commands_path, c_suffix, cxx_suffix):
         return None
 
     def split(entry):
-        tokens = shlex.split(entry["command"].replace("\\", "/"), posix=True)
+        # the folders of Windows to slashes, but the escaped quotes of a define (MBEDTLS_CONFIG_FILE=\"...\") kept for
+        # shlex, which makes them the quotes of the value
+        command = entry["command"].replace('\\"', "\x00").replace("\\", "/").replace("\x00", '\\"')
+        tokens = shlex.split(command, posix=True)
         includes, defines, flags = [], [], []
         pending = None
         for token in tokens[1:]:
@@ -308,6 +345,8 @@ def build(args):
         "link": link_flags(package, boot_dir, os.path.join(boot_dir, "build.ninja"), "bootloader.elf", "bootloader"),
     }
 
+    package.local_includes()
+
     config = os.path.join(out, "config")
     os.makedirs(config)
     shutil.copy2(sdkconfig, config)
@@ -373,7 +412,10 @@ def test(args, out, env):
     work = os.path.join(os.path.abspath(args.work), "test")
     os.makedirs(work, exist_ok=True)
     sources = {
-        "app": 'void app_main(void) {\n}\n',
+        # the headers a firmware takes first: the kernel through the SDK's forwards, Wi-Fi, lwIP, Mbed TLS
+        "app": '#include "freertos/FreeRTOS.h"\n#include "freertos/task.h"\n#include "esp_wifi.h"\n'
+               '#include "lwip/tcp.h"\n#include "mbedtls/sha256.h"\n'
+               'void app_main(void) {\n    vTaskDelay(1);\n}\n',
         "bootloader": '#include "bootloader_hooks.h"\nvolatile int hooked;\nvoid bootloader_after_init(void) {\n'
                       '    hooked = 1;\n}\n',
     }
