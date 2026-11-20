@@ -16,6 +16,7 @@
 
 #include <string.h>
 #include "bootloader_config.h"
+#include "bootloader_hooks.h"
 #include "bootloader_init.h"
 #include "bootloader_utility.h"
 #include "bootloader_common.h"
@@ -45,11 +46,8 @@ void call_start_cpu(void)
         return;
     }
 
-#ifdef ESPURNA_RBL
-    // ESPurna: a new head left as an RBL package goes onto 'factory' first (code/espurna/arch/esp8266/bootloader)
-    extern void espurna_rbl_install(void);
-    espurna_rbl_install();
-#endif
+    // the firmware's step before the image is chosen (bootloader_hooks.h; ESPurna installs a new head there)
+    bootloader_after_init();
 
 #ifdef CONFIG_BOOTLOADER_FAST_BOOT
     bootloader_utility_fast_boot_image();

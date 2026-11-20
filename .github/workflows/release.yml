@@ -1,10 +1,10 @@
 name: Release
 
-# The PlatformIO package framework-esp8266-rtos-sdk of the espurna branch, packed as a zip with the submodules (lwip:
-# GitHub's source archive of a tag has none). Every run keeps the package as an artifact; a push to espurna also
-# releases it: the tag is the version of package.json (3.4.0+espurna.3 -> 3.4.0-espurna.3), made by this workflow
-# when that release does not exist yet - a new release is a version bump of package.json.
-# No build here: ESPurna builds the SDK (scripts/esp8266_rtos_sdk.py).
+# The binary PlatformIO package framework-esp8266-rtos-sdk of the espurna branch: tools/espurna/build.py compiles the
+# SDK (app and bootloader) with GCC 14.2, the FreeRTOS kernel and Mbed TLS pinned below, links a test app and a test
+# bootloader from the package alone, and zips it. Every run keeps the package as an artifact; a push to espurna also
+# releases it: the tag is the version of package.json (3.4.0+espurna.4 -> 3.4.0-espurna.4), made by this workflow when
+# that release does not exist yet - a new release is a version bump of package.json.
 on:
   push:
     branches: [espurna]
@@ -13,6 +13,14 @@ on:
 
 permissions:
   contents: write
+
+env:
+  # Espressif's xtensa-esp-elf 14.2 (xtensa_esp8266.so in its lib/) and the lx106 target libraries built for it
+  TOOLCHAIN_URL: https://github.com/espressif/crosstool-NG/releases/download/esp-14.2.0_20260121/xtensa-esp-elf-14.2.0_20260121-x86_64-linux-gnu.tar.xz
+  LX106_URL: https://github.com/igorufox/toolchain-xtensa-lx106/releases/download/14.2.0-espurna.1/toolchain-xtensa-lx106-14.2.0-espurna.1.zip
+  KERNEL_URL: https://github.com/igorufox/FreeRTOS-Kernel/releases/download/11.1.0-espurna.3/framework-freertos-kernel-11.1.0-espurna.3.zip
+  MBEDTLS_REPO: https://github.com/igorufox/mbedtls.git
+  MBEDTLS_COMMIT: b3b5f67d252dcb83bafab82ddc3b280c030fc6d5   # 3.6.6-espurna.1
 
 jobs:
   package:
@@ -23,31 +31,38 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          # git describe gives the SDK its version (esp_get_idf_version)
+          fetch-depth: 0
 
       - name: Version
         run: |
           TAG=$(python3 -c "import json; print(json.load(open('package.json'))['version'].replace('+', '-'))")
+          VERSION=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")
           echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "ZIP=framework-esp8266-rtos-sdk-$TAG.zip" >> "$GITHUB_ENV"
           if gh release view "$TAG" > /dev/null 2>&1; then echo "RELEASED=1" >> "$GITHUB_ENV"; fi
 
-      - name: Package
+      - name: Tools
         run: |
-          # the files of git, the submodules included, zipped by Python (20.11: zip of the runner exited 0 and wrote
-          # nothing, twice)
-          mkdir -p dist
-          git ls-files --recurse-submodules > dist/files.txt
-          python3 - "dist/$ZIP" dist/files.txt <<'PY'
-          import sys, zipfile
-          out, names = sys.argv[1], open(sys.argv[2]).read().splitlines()
-          with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-              for name in filter(None, names):
-                  z.write(name)
-          with zipfile.ZipFile(out) as z:
-              listed = z.namelist()
-          assert "components/lwip/lwip/src/core/tcp.c" in listed, "lwip is missing"
-          print(out, len(listed), "files")
-          PY
+          sudo apt-get update -q
+          sudo apt-get install -y -q cmake ninja-build
+          # ldgen of the SDK 3.4 wants pyparsing 2.x
+          python3 -m pip install --user -q "pyparsing>=2.0.3,<2.4.0" pyelftools
+          mkdir -p ~/deps && cd ~/deps
+          curl -sSfL "$TOOLCHAIN_URL" | tar -xJ
+          curl -sSfL -o lx106.zip "$LX106_URL" && mkdir lx106 && unzip -q lx106.zip -d lx106
+          curl -sSfL -o kernel.zip "$KERNEL_URL" && mkdir kernel && unzip -q kernel.zip -d kernel
+          git init -q mbedtls && git -C mbedtls fetch -q --depth 1 "$MBEDTLS_REPO" "$MBEDTLS_COMMIT" \
+            && git -C mbedtls checkout -q FETCH_HEAD
+          ls ~/deps/xtensa-esp-elf/lib/xtensa_esp8266.so
+
+      - name: Build
+        run: |
+          python3 tools/espurna/build.py --toolchain ~/deps/xtensa-esp-elf --lx106 ~/deps/lx106 \
+            --kernel ~/deps/kernel --mbedtls ~/deps/mbedtls --version "$VERSION" \
+            --out dist/framework-esp8266-rtos-sdk --jobs "$(nproc)" --test
+          mv dist/framework-esp8266-rtos-sdk.zip "dist/$ZIP"
           ls -l "dist/$ZIP"
 
       - uses: actions/upload-artifact@v4

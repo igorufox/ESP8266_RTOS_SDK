@@ -1,0 +1,87 @@
+# The configuration of the SDK as ESPurna links it (tools/espurna/build.py, the release of this branch builds the
+# package with it). Only what differs from the SDK defaults. A change here is a new release of the package.
+
+# the flash of every ESP8266 board: DOUT, 40 MHz, the 1 MB layout on every chip size (as the Arduino build had)
+CONFIG_ESPTOOLPY_FLASHMODE_DOUT=y
+CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
+CONFIG_ESPTOOLPY_FLASHSIZE_1MB=y
+
+# the partition table is the firmware's (it makes the table with tools/gen_esp32part.py of the package): the SDK
+# only reads it at CONFIG_PARTITION_TABLE_OFFSET (0x8000) when it runs
+
+# WPA3-Personal (SAE): the reason for the SDK move; PMF is its prerequisite
+CONFIG_ESP8266_WIFI_ENABLE_WPA3_SAE=y
+
+# C++ exceptions stay off, as on the Arduino core
+# CONFIG_COMPILER_CXX_EXCEPTIONS is not set
+
+# The size of the head (owner 2026-11-18: the head as small as it goes, the RTOS SDK only for WPA3). The SDK's default
+# is a debug build: -Og, asserts with their file names, logs at INFO; ESPurna's code takes the same flags
+# (the flags.json of the package)
+CONFIG_COMPILER_OPTIMIZATION_LEVEL_RELEASE=y
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+# CONFIG_LWIP_ESP_LWIP_ASSERT is not set
+CONFIG_LOG_DEFAULT_LEVEL_ERROR=y
+# CONFIG_LOG_COLORS is not set
+
+# No NVS: ESPurna keeps the Wi-Fi settings itself (the driver's copy stays in RAM), the radio is calibrated in full on
+# every start instead of reading the last calibration back from NVS
+# CONFIG_ESP8266_WIFI_NVS_ENABLED is not set
+# CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE is not set
+
+# mbedtls curves (owner 2026-11-18: head < 500 KB): WPA3 SAE takes P-256 (group 19), TLS P-256 / P-384 and X25519;
+# the others' parameters and code are out of the head
+# CONFIG_MBEDTLS_ECP_DP_SECP192R1_ENABLED is not set
+# CONFIG_MBEDTLS_ECP_DP_SECP224R1_ENABLED is not set
+CONFIG_MBEDTLS_ECP_DP_SECP256R1_ENABLED=y
+CONFIG_MBEDTLS_ECP_DP_SECP384R1_ENABLED=y
+# CONFIG_MBEDTLS_ECP_DP_SECP521R1_ENABLED is not set
+# CONFIG_MBEDTLS_ECP_DP_SECP192K1_ENABLED is not set
+# CONFIG_MBEDTLS_ECP_DP_SECP224K1_ENABLED is not set
+# CONFIG_MBEDTLS_ECP_DP_SECP256K1_ENABLED is not set
+# CONFIG_MBEDTLS_ECP_DP_BP256R1_ENABLED is not set
+# CONFIG_MBEDTLS_ECP_DP_BP384R1_ENABLED is not set
+# CONFIG_MBEDTLS_ECP_DP_BP512R1_ENABLED is not set
+CONFIG_MBEDTLS_ECP_DP_CURVE25519_ENABLED=y
+
+# lwIP (owner 2026-11-18, head < 500 KB): no ARP check of the address DHCP offers (ACD), no IP fragments either way (a
+# LAN of 1500 bytes MTU, nothing ESPurna sends or takes is bigger than a segment)
+# CONFIG_LWIP_DHCP_DOES_ARP_CHECK is not set
+# CONFIG_LWIP_IP4_FRAG is not set
+# CONFIG_LWIP_IP4_REASSEMBLY is not set
+
+# the console of the SDK at the same speed as ESPurna's (uart_open 115200): the panic dump and the boot log readable on one
+# port setting
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+CONFIG_CONSOLE_UART_BAUDRATE=115200
+
+# the tick hook of the head (system_esp8266.cpp watch_tick): a watcher task lost by the scheduler resets the board
+CONFIG_FREERTOS_EXTENED_HOOKS=y
+
+# HEAP lists every task and its unused stack (chip_esp8266.cpp memory(): uxTaskGetSystemState)
+CONFIG_FREERTOS_USE_TRACE_FACILITY=y
+
+# newlib 'nano' (its vfprintf unused): vsnprintf and its family are the head's own (stdio_esp8266.c) - the nano printf
+# has no %zu / %lld and no floats, the full one costs 25 KB of the head (11-18)
+CONFIG_NEWLIB_NANO_FORMAT=y
+
+
+# the curves of mbedtls the head needs: P-256 alone (WPA3 SAE group 19; TLS of the modules is BearSSL). P-384 and
+# Curve25519 were in the head for nothing (ecp_mod_p384 1.6 KB alone, 11-18 memory pass)
+# CONFIG_MBEDTLS_ECP_DP_SECP384R1_ENABLED is not set
+# CONFIG_MBEDTLS_ECP_DP_CURVE25519_ENABLED is not set
+
+# TCP of every chip (regress-todo 33, owner 2026-11-19 "full unification"): MSS 1440 (MTU 1500 - IPv6 40 - TCP 20),
+# receive window 4 x MSS, send buffer 2 x MSS, oversize MSS / 4 (a small write takes 360 bytes more, not a whole segment;
+# 0 is not possible: the Wi-Fi drivers send a frame from one pbuf, LWIP_NETIF_TX_SINGLE_PBUF, which needs it). The same in
+# code/sdkconfig.defaults (ESP32) and espurna/arch/beken/lwipopts/lwipopts.h; espurna/net.cpp checks them at build
+CONFIG_LWIP_TCP_MSS=1440
+CONFIG_LWIP_TCP_WND_DEFAULT=5760
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880
+# CONFIG_LWIP_TCP_OVERSIZE_MSS is not set
+CONFIG_LWIP_TCP_OVERSIZE_QUARTER_MSS=y
+
+# task stacks by the high-water marks of 18.11 (WebUI + MQTT + API: loopTask 4176 of 8192 free, Tmr Svc 1624 of 2048,
+# sys_evt 1556 of 2048), regress-todo.md question 3, owner 19.11 «урезай и делай регрес»
+CONFIG_FREERTOS_TIMER_STACKSIZE=1536
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=1536

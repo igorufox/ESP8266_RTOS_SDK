@@ -44,3 +44,6 @@ docs/doxygen_sqlite3.db
 .DS_Store
 
 docs/_build/
+# tools/espurna/build.py: the work folder and the package
+build-espurna/
+build-espurna.log
