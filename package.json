@@ -1,6 +1,6 @@
 {
   "name": "framework-esp8266-rtos-sdk",
-  "version": "3.4.0+espurna.5",
+  "version": "3.4.0+espurna.6",
   "description": "ESP8266_RTOS_SDK master 858c7c2e (Espressif) for ESPurna, released COMPILED (tools/espurna/build.py): the archives, headers, sdkconfig, linker scripts and flags of the app and of the bootloader; GCC 14.2, FreeRTOS-Kernel V11.1.0, esp-lwip 2.2.0, Mbed TLS 3.6.6",
   "license": "Apache-2.0",
   "repository": {

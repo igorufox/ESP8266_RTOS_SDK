@@ -2125,7 +2125,14 @@ int wpa_set_bss(char *macddr, char * bssid, u8 pairwise_cipher, u8 group_cipher,
     memcpy(sm->bssid, bssid, ETH_ALEN);
     sm->ap_notify_completed_rsne = esp_wifi_sta_is_ap_notify_completed_rsne_internal();
 
-    if (sm->key_mgmt == WPA_KEY_MGMT_SAE ||
+    /* ESPurna 20.11: SAE without PMKSA caching, each connection makes its full SAE: the blob does not complete an
+       association by a cached PMK with foxy (SAE + PMF), and a cache entry made current here is freed by the next
+       disconnect, whose free callback zeroes sm->pmk and deauthenticates (wpa_sm_pmksa_free_cb) - that disconnect is
+       reported after the next attempt began (the cancel of the previous one). So the cache goes at the start of every
+       connection and no entry is made current */
+    if (sm->key_mgmt == WPA_KEY_MGMT_SAE) {
+        wpa_sta_clear_curr_pmksa();
+    } else if (
         (esp_wifi_sta_prof_is_wpa2_internal() &&
          esp_wifi_sta_get_prof_authmode_internal() == WPA2_AUTH_ENT)) {
         pmksa_cache_set_current(sm, NULL, (const u8*) bssid, 0, 0);
@@ -2388,8 +2395,12 @@ bool wpa_sta_cur_pmksa_matches_akm(void) {
 void wpa_sta_clear_curr_pmksa(void) {
     struct wpa_sm *sm = &gWpaSm;
 
+    /* ESPurna 20.11: every entry, not those of sm->pmk - when the attempt went by a cached PMKSA, wpa_set_bss() had
+       already set sm->pmk from it or emptied it (pmk_len 0), the flush by the PMK matched nothing and the stale entry
+       stayed: the next attempt "Skip SAE and use cached PMK" again, AUTH_EXPIRE / no 4-way handshake, every attempt
+       until a reboot (COM3 20.11: 1.5 h off the network after one WIFI.RESET) */
     if (sm->pmksa)
-        pmksa_cache_flush(sm->pmksa, NULL, sm->pmk, sm->pmk_len);
+        pmksa_cache_flush(sm->pmksa, NULL, NULL, 0);
     pmksa_cache_clear_current(sm);
 }
 

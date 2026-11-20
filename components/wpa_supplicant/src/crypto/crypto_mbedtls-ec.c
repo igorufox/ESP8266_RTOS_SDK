@@ -374,22 +374,34 @@ struct crypto_bignum *crypto_ec_point_compute_y_sqr(struct crypto_ec *e,
 	 *
 	 */
 
-	/* Calculate x^3  mod P*/
-	MBEDTLS_MPI_CHK(mbedtls_mpi_lset(&num, 3));
-	MBEDTLS_MPI_CHK(mbedtls_mpi_exp_mod(&temp, (const mbedtls_mpi *) x, &num, &e->group.P, NULL));
+	/* espurna 20.11: no exponentiation and no remainder by division (a long division in software on the lx106,
+	 * several ms each; SAE hunting-and-pecking computes this for 40+ candidates per attempt): x^3 by two
+	 * crypto_bignum_mulmod() (P-256 without a division, crypto_mbedtls-bignum.c), a = -3 (the curves of SAE here),
+	 * the sums brought below P by subtractions */
 
-	/* Calculate ax  mod P*/
-	MBEDTLS_MPI_CHK(mbedtls_mpi_lset(&num, -3));
-	MBEDTLS_MPI_CHK(mbedtls_mpi_mul_mpi(&temp2, (const mbedtls_mpi *) x, &num));
-	MBEDTLS_MPI_CHK(mbedtls_mpi_mod_mpi(&temp2, &temp2, &e->group.P));
+	/* x^3 mod P */
+	if (crypto_bignum_mulmod(x, x, (const struct crypto_bignum *) &e->group.P, (struct crypto_bignum *) &temp) < 0 ||
+	    crypto_bignum_mulmod((const struct crypto_bignum *) &temp, x, (const struct crypto_bignum *) &e->group.P,
+				 (struct crypto_bignum *) &temp) < 0) {
+		ret = -1;
+		goto cleanup;
+	}
 
-	/* Calculate ax + b  mod P. Note that b is already < P*/
+	/* -3x mod P: 3x (x < P) is below 3P */
+	MBEDTLS_MPI_CHK(mbedtls_mpi_mul_int(&temp2, (const mbedtls_mpi *) x, 3));
+	while (mbedtls_mpi_cmp_mpi(&temp2, &e->group.P) >= 0) {
+		MBEDTLS_MPI_CHK(mbedtls_mpi_sub_mpi(&temp2, &temp2, &e->group.P));
+	}
+	if (mbedtls_mpi_cmp_int(&temp2, 0) != 0) {
+		MBEDTLS_MPI_CHK(mbedtls_mpi_sub_mpi(&temp2, &e->group.P, &temp2));
+	}
+
+	/* x^3 + ax + b mod P: each term below P, the sum below 3P */
 	MBEDTLS_MPI_CHK(mbedtls_mpi_add_mpi(&temp2, &temp2, &e->group.B));
-	MBEDTLS_MPI_CHK(mbedtls_mpi_mod_mpi(&temp2, &temp2, &e->group.P));
-
-	/* Calculate x^3 + ax + b  mod P*/
-	MBEDTLS_MPI_CHK(mbedtls_mpi_add_mpi(&temp2, &temp2, &temp));
-	MBEDTLS_MPI_CHK(mbedtls_mpi_mod_mpi(y_sqr, &temp2, &e->group.P));
+	MBEDTLS_MPI_CHK(mbedtls_mpi_add_mpi(y_sqr, &temp2, &temp));
+	while (mbedtls_mpi_cmp_mpi(y_sqr, &e->group.P) >= 0) {
+		MBEDTLS_MPI_CHK(mbedtls_mpi_sub_mpi(y_sqr, y_sqr, &e->group.P));
+	}
 
 cleanup:
 	mbedtls_mpi_free(&temp);
